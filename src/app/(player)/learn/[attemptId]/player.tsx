@@ -15,6 +15,7 @@ import { SlideView } from "@/components/slides/slide-view";
 import { videoEmbedUrl } from "@/components/slides/media";
 import { QuestionUI, type Feedback } from "@/components/slides/question-ui";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/client";
 import { finishAttemptAction, saveProgressAction, submitAnswerAction } from "./actions";
 
 type Props = {
@@ -35,6 +36,7 @@ const needsMedia = (s: PlayerSlide) =>
 
 export function Player({ attemptId, courseId, courseTitle, theme, slides, initialIndex, initialFeedback, preview }: Props) {
   const router = useRouter();
+  const t = useT();
   const [index, setIndex] = React.useState(Math.min(Math.max(0, initialIndex), Math.max(0, slides.length - 1)));
   const [direction, setDirection] = React.useState(1);
   const [feedback, setFeedback] = React.useState<Record<string, Feedback>>(initialFeedback);
@@ -148,7 +150,7 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
           href={exitHref}
           className="glass grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted hover:text-fg"
           aria-label={preview ? "Exit preview" : "Exit course"}
-          title={preview ? "Back to the editor" : "Exit (your progress is saved)"}
+          title={preview ? "Back to the editor" : t("player.exit")}
         >
           <X className="h-5 w-5" />
         </Link>
@@ -178,9 +180,9 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
             setSoundEnabled(!sound);
           }}
           className="glass grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted hover:text-fg"
-          aria-label={sound ? "Mute sounds" : "Turn sounds on"}
+          aria-label={sound ? t("player.mute") : t("player.unmute")}
           aria-pressed={!sound}
-          title={sound ? "Mute sounds" : "Turn sounds on"}
+          title={sound ? t("player.mute") : t("player.unmute")}
         >
           {sound ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
         </button>
@@ -189,9 +191,7 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
             {index + 1} / {slides.length}
           </div>
           {questionCount > 0 && (
-            <div className="tabular-nums">
-              {answeredCount}/{questionCount} answered
-            </div>
+            <div className="tabular-nums">{t("player.answered", { n: answeredCount, total: questionCount })}</div>
           )}
         </div>
       </header>
@@ -251,9 +251,9 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
           disabled={index === 0}
           className="glass flex h-12 items-center gap-2 rounded-2xl px-5 font-semibold transition hover:bg-card-solid disabled:opacity-40"
         >
-          <ArrowLeft className="h-5 w-5" /> <span className="hidden sm:inline">Back</span>
+          <ArrowLeft className="h-5 w-5" /> <span className="hidden sm:inline">{t("player.back")}</span>
         </button>
-        <div className="hidden text-xs text-muted md:block">Use ← → keys to navigate</div>
+        <div className="hidden text-xs text-muted md:block">{t("player.keys")}</div>
         <button
           onClick={next}
           disabled={blocked || finishing}
@@ -265,21 +265,22 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
         >
           {blocked ? (
             <>
-              <Lock className="h-4 w-4" /> {waitingForMedia
+              <Lock className="h-4 w-4" />{" "}
+              {waitingForMedia
                 ? slide.layout === "audio"
-                  ? "Listen to continue"
+                  ? t("player.listenToContinue")
                   : slide.layout === "document"
-                    ? "Open the document to continue"
-                    : "Watch to continue"
-                : "Answer to continue"}
+                    ? t("player.openDocToContinue")
+                    : t("player.watchToContinue")
+                : t("player.answerToContinue")}
             </>
           ) : isLast ? (
             <>
-              <Flag className="h-5 w-5" /> {finishing ? "Finishing…" : "Finish"}
+              <Flag className="h-5 w-5" /> {finishing ? t("player.finishing") : t("player.finish")}
             </>
           ) : (
             <>
-              Next <ArrowRight className="h-5 w-5" />
+              {t("player.next")} <ArrowRight className="h-5 w-5" />
             </>
           )}
         </button>

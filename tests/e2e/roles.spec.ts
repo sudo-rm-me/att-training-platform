@@ -25,7 +25,10 @@ test("the bootstrap admin can reach every admin page", async ({ browser }) => {
 
   // Seed a course to work with.
   await admin.goto("/courses");
-  await admin.getByRole("button", { name: "Add sample course" }).click();
+  // Another spec may have added it already.
+  const sample = admin.getByRole("button", { name: "Add sample course" });
+  if (await sample.isVisible()) await sample.click();
+  else await admin.getByRole("link", { name: /Cyber Security Essentials/ }).first().click();
   await admin.waitForURL(/\/courses\/[0-9a-f-]{36}$/);
   courseId = admin.url().split("/").pop()!;
 });

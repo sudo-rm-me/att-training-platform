@@ -15,6 +15,11 @@ A training and training-tracking platform: slide-based courses with quizzes, XP,
 - **Compliance**: recurring training (every 6, 12, 24 or 36 months) expires and asks people to renew; acknowledgement slides record a timestamped policy sign-off; a daily job sends email (Microsoft Graph) and Teams channel reminders, weekly manager digests with escalation, and managers can nudge people from the Team page.
 - **Team progress**: team leads see completion, overdue training and XP for their teams, and can download members' certificates.
 - **Certificates**: every passed course earns a PDF certificate (`/certificates`).
+- **Reports** (admins): live dashboard with active learners, passes and average score, a weekly passes chart (with table view), compliance by team or department, a per-course table (learners, pass rate, average score, rating) and the trickiest questions.
+- **Search**: press `Ctrl+K` (or `/`) anywhere to jump to pages, courses, badges and, for managers, people.
+- **Languages**: English, French, German and Spanish for navigation, dashboard, the course player and results. The browser language is used unless the person picks one in their avatar menu.
+- **Accessibility**: keyboard-operable everywhere, including drag-and-drop ordering with screen-reader announcements and move buttons. An automated axe audit (WCAG 2.1 AA) runs in CI over every main page in light and dark themes.
+- **Installable app**: a PWA with an icon, Start menu shortcuts and an offline screen. Install it from Edge/Chrome or push it to Windows devices with Intune, or package it as MSIX. See [docs/WINDOWS-APP.md](docs/WINDOWS-APP.md).
 
 ## Quick start (local)
 

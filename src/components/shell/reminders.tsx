@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, CheckCheck, Hand, Megaphone, Users } from "lucide-react";
+import { Bell, CheckCheck, Hand, HeartHandshake, Megaphone, Users } from "lucide-react";
 import type { DueState } from "@/lib/assignments";
 import { DueChip } from "@/components/due-chip";
 import { markNotificationsReadAction } from "@/app/notification-actions";
@@ -16,7 +16,7 @@ function ago(iso: string) {
   return `${Math.round(h / 24)}d ago`;
 }
 
-const KIND_ICON = { nudge: Hand, summary: Users, reminder: Megaphone } as const;
+const KIND_ICON = { nudge: Hand, summary: Users, reminder: Megaphone, kudos: HeartHandshake } as const;
 
 /** Topbar bell: training that's due, plus reminders, nudges and digests. */
 export function Reminders({ items, updates = [] }: { items: Reminder[]; updates?: Update[] }) {

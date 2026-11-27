@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, ChevronDown, ChevronUp, GripVertical, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, GripVertical, Sparkles, X, Zap } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils";
 export type Feedback = {
   correct: boolean;
   points: number;
+  /** Extra XP for answering quickly. */
+  bonus?: number;
   explanation?: string;
   correctAnswer: string[];
   answer: AnswerValue;
@@ -325,6 +327,11 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
               {feedback.correct ? (
                 <>
                   <Sparkles className="h-[1.1em] w-[1.1em]" /> Correct! +{feedback.points} pts
+                  {!!feedback.bonus && (
+                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white/25 px-2 py-0.5 text-[0.85em]">
+                      <Zap className="h-[1em] w-[1em]" /> +{feedback.bonus} speed bonus
+                    </span>
+                  )}
                 </>
               ) : (
                 <>

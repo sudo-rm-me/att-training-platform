@@ -3,7 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { notifications, type Notification } from "@/db/schema";
 
-export type NotificationKind = "reminder" | "nudge" | "summary";
+export type NotificationKind = "reminder" | "nudge" | "summary" | "kudos";
 export type NewNotification = { userId: string; kind: NotificationKind; title: string; body?: string; link?: string | null };
 
 export async function notify(items: NewNotification | NewNotification[]) {

@@ -12,7 +12,9 @@ export type NavIcon =
   | "users"
   | "audit"
   | "teams"
-  | "reminders";
+  | "reminders"
+  | "kudos"
+  | "events";
 
 export type NavItem = { href: string; label: string; icon: NavIcon };
 export type NavSection = { title: string; items: NavItem[] };
@@ -28,6 +30,7 @@ export function buildNav(p: NavPerms): NavSection[] {
         { href: "/courses", label: "Courses", icon: "courses" },
         { href: "/leaderboard", label: "Leaderboard", icon: "leaderboard" },
         { href: "/badges", label: "Badges", icon: "badges" },
+        { href: "/kudos", label: "Kudos", icon: "kudos" },
       ],
     },
     {
@@ -58,6 +61,7 @@ export function buildNav(p: NavPerms): NavSection[] {
         { href: "/admin/users", label: "People & roles", icon: "users" },
         { href: "/admin/teams", label: "Teams", icon: "teams" },
         { href: "/admin/reminders", label: "Reminders", icon: "reminders" },
+        { href: "/admin/events", label: "Events", icon: "events" },
         { href: "/admin/audit", label: "Audit log", icon: "audit" },
       ],
     });

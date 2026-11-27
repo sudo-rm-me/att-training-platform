@@ -8,6 +8,8 @@ export type BadgeStats = {
   level: number;
   itemsBought: number;
   avatarCustomised: boolean;
+  kudosSent?: number;
+  kudosReceived?: number;
   /** Facts about the attempt that just finished (if any). */
   last?: {
     passed: boolean;
@@ -176,6 +178,26 @@ export const BADGES: BadgeDef[] = [
     xp: 25,
     earned: (s) => s.itemsBought >= 3,
     progress: (s) => [Math.min(3, s.itemsBought), 3],
+  },
+  {
+    key: "cheerleader",
+    name: "Cheerleader",
+    description: "Send 5 kudos to colleagues.",
+    emoji: "📣",
+    colors: ["#fde68a", "#d97706"],
+    xp: 20,
+    earned: (s) => (s.kudosSent ?? 0) >= 5,
+    progress: (s) => [Math.min(5, s.kudosSent ?? 0), 5],
+  },
+  {
+    key: "appreciated",
+    name: "Appreciated",
+    description: "Receive 5 kudos from colleagues.",
+    emoji: "💖",
+    colors: ["#fecdd3", "#e11d48"],
+    xp: 25,
+    earned: (s) => (s.kudosReceived ?? 0) >= 5,
+    progress: (s) => [Math.min(5, s.kudosReceived ?? 0), 5],
   },
 ];
 

@@ -1,7 +1,7 @@
 import "server-only";
 import { and, count, countDistinct, eq, isNotNull, lt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { attempts, courses, userBadges, userItems, users, type Attempt } from "@/db/schema";
+import { attempts, courses, kudos, userBadges, userItems, users, type Attempt } from "@/db/schema";
 import { BADGES, type BadgeDef, type BadgeStats } from "./badges";
 import { levelFromXp } from "./levels";
 import { grantXp } from "./rewards";
@@ -45,6 +45,10 @@ export async function badgeStats(userId: string, last?: BadgeStats["last"]): Pro
     .select({ n: count() })
     .from(userItems)
     .where(and(eq(userItems.userId, userId), sql`${userItems.price} > 0`));
+  const [[sent], [received]] = await Promise.all([
+    db.select({ n: count() }).from(kudos).where(eq(kudos.fromId, userId)),
+    db.select({ n: count() }).from(kudos).where(eq(kudos.toId, userId)),
+  ]);
   return {
     passedCourses: passed.n,
     perfectCourses: perfect.n,
@@ -53,6 +57,8 @@ export async function badgeStats(userId: string, last?: BadgeStats["last"]): Pro
     level: levelFromXp(u.xp).level,
     itemsBought: items.n,
     avatarCustomised: u.avatar != null,
+    kudosSent: sent.n,
+    kudosReceived: received.n,
     last,
   };
 }

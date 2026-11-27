@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { userItems, users, xpEvents, type AvatarConfig } from "@/db/schema";
+import { userBadges, userItems, users, xpEvents, type AvatarConfig } from "@/db/schema";
 import { requireUser } from "@/lib/session";
-import { HAIR_COLORS, ITEM_BY_KEY, isUnlocked, SKIN_TONES, TOP_COLORS } from "@/lib/avatar";
+import { badgeItemKeys, HAIR_COLORS, ITEM_BY_KEY, isUnlocked, SKIN_TONES, TOP_COLORS } from "@/lib/avatar";
 import { levelFromXp } from "@/lib/levels";
 import { awardBadges } from "@/lib/gamification";
 import { BADGE_BY_KEY } from "@/lib/badges";
@@ -37,6 +37,9 @@ export async function saveAvatarAction(config: AvatarConfig) {
     return { ok: false as const, error: "Unknown colour" };
 
   const owned = await ownedItems(user.id);
+  const db0 = await getDb();
+  const held = await db0.select({ b: userBadges.badge }).from(userBadges).where(eq(userBadges.userId, user.id));
+  for (const k of badgeItemKeys(held.map((r) => r.b))) owned.add(k);
   const level = levelFromXp(user.xp).level;
   for (const cat of ["hair", "eyes", "brows", "mouth", "top", "accessory", "background"] as const) {
     const it = ITEM_BY_KEY.get(`${cat}:${c[cat]}`);

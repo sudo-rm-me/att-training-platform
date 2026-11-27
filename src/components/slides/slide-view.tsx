@@ -22,7 +22,16 @@ export type SlideViewProps = {
  * Presentational slide used by the player, the editor preview and thumbnails.
  * Text scales with the stage width via container query units.
  */
-export function SlideView({ theme, layout, kind, title, body, mediaUrl, children, className, fixedAspect }: SlideViewProps) {
+export function SlideView(props: SlideViewProps) {
+  // Text sizes use cqw, which resolve against the nearest *ancestor* container.
+  return (
+    <div className="@container w-full">
+      <SlideInner {...props} />
+    </div>
+  );
+}
+
+function SlideInner({ theme, layout, kind, title, body, mediaUrl, children, className, fixedAspect }: SlideViewProps) {
   const prose = cn("slide-prose", theme.dark ? "[&_a]:text-[var(--slide-accent)]" : "[&_a]:text-[var(--slide-accent)]");
   const style = {
     background: theme.background,
@@ -31,8 +40,8 @@ export function SlideView({ theme, layout, kind, title, body, mediaUrl, children
   } as React.CSSProperties;
 
   const stage = cn(
-    "@container relative w-full overflow-hidden rounded-[1.75rem] shadow-2xl",
-    fixedAspect ? "aspect-video text-[1.7cqw]" : "min-h-[70vh] text-base md:aspect-video md:min-h-0 md:text-[1.7cqw]",
+    "relative w-full overflow-hidden rounded-[1.75rem] shadow-2xl",
+    fixedAspect ? "aspect-video text-[2cqw]" : "min-h-[70vh] text-base md:aspect-video md:min-h-0 md:text-[2cqw]",
     className,
   );
 

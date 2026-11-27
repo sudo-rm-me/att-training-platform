@@ -70,9 +70,32 @@ function init() {
   return holder as Required<Holder>;
 }
 
+type DevHolder = Holder & { journalMtime?: number };
+
+/** In development, pick up newly generated migrations without a restart. */
+async function devRemigrate(h: Required<Holder>) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require("node:fs") as typeof import("node:fs");
+  const journal = path.join(MIGRATIONS, "meta", "_journal.json");
+  const mtime = fs.statSync(journal).mtimeMs;
+  const dh = holder as DevHolder;
+  if (dh.journalMtime === undefined) {
+    dh.journalMtime = mtime;
+    return;
+  }
+  if (dh.journalMtime === mtime) return;
+  dh.journalMtime = mtime;
+  const url = process.env.DATABASE_URL ?? "pglite:./.data/pglite";
+  const mod = url.startsWith("pglite:") ? "drizzle-orm/pglite/migrator" : "drizzle-orm/node-postgres/migrator";
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { migrate } = require(mod) as { migrate: (db: unknown, o: { migrationsFolder: string }) => Promise<void> };
+  h.ready = migrate(h.db, { migrationsFolder: MIGRATIONS });
+}
+
 /** Returns the database once migrations have been applied. */
 export async function getDb(): Promise<DB> {
   const h = init();
+  if (process.env.NODE_ENV === "development") await devRemigrate(h);
   await h.ready;
   return h.db;
 }

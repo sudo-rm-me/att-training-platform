@@ -7,6 +7,8 @@ import {
   timestamp,
   jsonb,
   index,
+  primaryKey,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["learner", "manager", "author", "admin"]);
@@ -49,3 +51,175 @@ export const users = pgTable(
 );
 
 export type User = typeof users.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Courses & slides
+// ---------------------------------------------------------------------------
+
+export const courseStatusEnum = pgEnum("course_status", ["draft", "published", "archived"]);
+export type CourseStatus = (typeof courseStatusEnum.enumValues)[number];
+
+export const courses = pgTable(
+  "courses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    category: text("category").notNull().default("General"),
+    /** Slide theme key, see src/lib/themes.ts */
+    theme: text("theme").notNull().default("aurora"),
+    /** Emoji shown on the course card. */
+    icon: text("icon").notNull().default("📘"),
+    coverImage: text("cover_image"),
+    estimatedMinutes: integer("estimated_minutes").notNull().default(10),
+    /** Percentage required to pass (0-100). */
+    passMark: integer("pass_mark").notNull().default(70),
+    /** Null = unlimited attempts. */
+    maxAttempts: integer("max_attempts"),
+    /** Bonus XP for passing (on top of per-question points). */
+    completionXp: integer("completion_xp").notNull().default(50),
+    status: courseStatusEnum("status").notNull().default("draft"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  (t) => [index("courses_status_idx").on(t.status)],
+);
+export type Course = typeof courses.$inferSelect;
+
+export type SlideLayout =
+  | "title"
+  | "content"
+  | "image-left"
+  | "image-right"
+  | "image-full"
+  | "video"
+  | "quote"
+  | "section";
+
+export type ChoiceOption = { id: string; text: string };
+
+export type QuestionData =
+  | {
+      type: "single" | "multi";
+      prompt: string;
+      options: ChoiceOption[];
+      correct: string[];
+      explanation?: string;
+      points?: number;
+    }
+  | {
+      type: "truefalse";
+      prompt: string;
+      correct: boolean;
+      explanation?: string;
+      points?: number;
+    }
+  | {
+      /** items are stored in the correct order */
+      type: "ordering";
+      prompt: string;
+      items: ChoiceOption[];
+      explanation?: string;
+      points?: number;
+    }
+  | {
+      type: "matching";
+      prompt: string;
+      pairs: { id: string; left: string; right: string }[];
+      explanation?: string;
+      points?: number;
+    };
+
+export type QuestionType = QuestionData["type"];
+
+export const slides = pgTable(
+  "slides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    kind: text("kind").$type<"content" | "question">().notNull().default("content"),
+    layout: text("layout").$type<SlideLayout>().notNull().default("content"),
+    title: text("title").notNull().default(""),
+    /** Lightweight markdown */
+    body: text("body").notNull().default(""),
+    mediaUrl: text("media_url"),
+    notes: text("notes"),
+    question: jsonb("question").$type<QuestionData>(),
+  },
+  (t) => [index("slides_course_idx").on(t.courseId, t.position)],
+);
+export type Slide = typeof slides.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Attempts & answers
+// ---------------------------------------------------------------------------
+
+export const attempts = pgTable(
+  "attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    currentSlide: integer("current_slide").notNull().default(0),
+    /** Percentage 0-100 */
+    score: integer("score"),
+    correctCount: integer("correct_count"),
+    questionCount: integer("question_count"),
+    passed: boolean("passed"),
+    xpEarned: integer("xp_earned").notNull().default(0),
+    coinsEarned: integer("coins_earned").notNull().default(0),
+  },
+  (t) => [index("attempts_user_course_idx").on(t.userId, t.courseId), index("attempts_course_idx").on(t.courseId)],
+);
+export type Attempt = typeof attempts.$inferSelect;
+
+export type AnswerValue = string[] | boolean | Record<string, string>;
+
+export const attemptAnswers = pgTable(
+  "attempt_answers",
+  {
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => attempts.id, { onDelete: "cascade" }),
+    slideId: uuid("slide_id")
+      .notNull()
+      .references(() => slides.id, { onDelete: "cascade" }),
+    answer: jsonb("answer").$type<AnswerValue>().notNull(),
+    correct: boolean("correct").notNull(),
+    points: integer("points").notNull().default(0),
+    answeredAt: timestamp("answered_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.attemptId, t.slideId] })],
+);
+export type AttemptAnswer = typeof attemptAnswers.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// XP ledger (drives leaderboards by period)
+// ---------------------------------------------------------------------------
+
+export const xpEvents = pgTable(
+  "xp_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    xp: integer("xp").notNull().default(0),
+    coins: integer("coins").notNull().default(0),
+    reason: text("reason").notNull(),
+    refId: text("ref_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("xp_events_user_idx").on(t.userId, t.createdAt), index("xp_events_created_idx").on(t.createdAt)],
+);

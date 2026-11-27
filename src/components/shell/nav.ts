@@ -20,7 +20,10 @@ export function buildNav(p: NavPerms): NavSection[] {
   const sections: NavSection[] = [
     {
       title: "Learn",
-      items: [{ href: "/", label: "Dashboard", icon: "home" }],
+      items: [
+        { href: "/", label: "Dashboard", icon: "home" },
+        { href: "/courses", label: "Courses", icon: "courses" },
+      ],
     },
   ];
   if (p.admin) {

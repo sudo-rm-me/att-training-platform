@@ -269,6 +269,8 @@ export const attempts = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     currentSlide: integer("current_slide").notNull().default(0),
+    /** When the current slide was shown (for the speed bonus). */
+    slideShownAt: timestamp("slide_shown_at", { withTimezone: true }),
     /** Percentage 0-100 */
     score: integer("score"),
     correctCount: integer("correct_count"),
@@ -298,6 +300,8 @@ export const attemptAnswers = pgTable(
     answer: jsonb("answer").$type<AnswerValue>().notNull(),
     correct: boolean("correct").notNull(),
     points: integer("points").notNull().default(0),
+    /** Speed bonus XP (doesn't count towards the score). */
+    bonus: integer("bonus").notNull().default(0),
     answeredAt: timestamp("answered_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.attemptId, t.slideId] })],
@@ -447,3 +451,44 @@ export const deliveryLog = pgTable("delivery_log", {
   key: text("key").primaryKey(),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Seasonal events (XP multipliers, team challenges) and kudos
+// ---------------------------------------------------------------------------
+
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    emoji: text("emoji").notNull().default("🎉"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    /** Percent: 200 = double XP. */
+    xpMultiplier: integer("xp_multiplier").notNull().default(200),
+    /** Show a team leaderboard for XP earned during the event. */
+    teamChallenge: boolean("team_challenge").notNull().default(false),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("events_window_idx").on(t.startsAt, t.endsAt)],
+);
+export type GameEvent = typeof events.$inferSelect;
+
+export const kudos = pgTable(
+  "kudos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fromId: uuid("from_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    toId: uuid("to_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    coins: integer("coins").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("kudos_to_idx").on(t.toId, t.createdAt), index("kudos_from_idx").on(t.fromId, t.createdAt), index("kudos_created_idx").on(t.createdAt)],
+);

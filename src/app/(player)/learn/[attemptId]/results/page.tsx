@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { and, eq, lt, min, sum } from "drizzle-orm";
-import { Check, Clock, Coins, Flame, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { Check, Clock, Coins, Flame, RotateCcw, Sparkles, Target, X, Zap } from "lucide-react";
 import { getDb } from "@/db";
 import { attemptAnswers, attempts, courses, userBadges, users, xpEvents } from "@/db/schema";
 import { BADGE_BY_KEY } from "@/lib/badges";
@@ -10,7 +10,7 @@ import { requireUser } from "@/lib/session";
 import { attemptSlides, completedAttemptCount, startOrResumeAttempt } from "@/lib/attempts";
 import { describeAnswer, describeCorrect, QUESTION_TYPE_LABEL } from "@/lib/quiz";
 import { Badge, Button, Card, LinkButton } from "@/components/ui";
-import { Confetti, CountUp, ScoreRing } from "./celebrate";
+import { Confetti, CountUp, LevelUpModal, ScoreRing } from "./celebrate";
 import { RateCourse } from "./rate-course";
 import { myRating } from "@/lib/ratings";
 
@@ -49,6 +49,8 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
     .map((b) => BADGE_BY_KEY.get(b.badge))
     .filter((b) => b != null);
   const streakEvent = events.find((e) => e.reason === "streak");
+  const eventBonus = events.find((e) => e.reason === "event");
+  const speedXp = answers.reduce((n, a) => n + a.bonus, 0);
   const totalXp = events.reduce((n, e) => n + e.xp, 0);
   const totalCoins = events.reduce((n, e) => n + e.coins, 0);
   let levelUp: { from: number; to: number } | null = null;
@@ -79,6 +81,7 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <Confetti fire={passed} />
+      {levelUp && <LevelUpModal attemptId={attemptId} from={levelUp.from} to={levelUp.to} title={levelFromXp(user.xp).title} />}
 
       <Card className="relative overflow-hidden p-8 text-center md:p-10">
         <div className="pointer-events-none absolute inset-x-0 -top-40 mx-auto h-80 w-80 rounded-full bg-brand/25 blur-3xl" />
@@ -125,7 +128,7 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
               <div className="text-xs text-muted">Time</div>
             </div>
           </div>
-          {(levelUp || streakEvent || earnedBadges.length > 0) && (
+          {(levelUp || streakEvent || eventBonus || speedXp > 0 || earnedBadges.length > 0) && (
             <div className="mt-6 w-full space-y-3">
               {levelUp && (
                 <div className="shine flex items-center justify-center gap-3 rounded-2xl bg-brand-gradient px-5 py-4 text-white">
@@ -139,6 +142,16 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
               {streakEvent && (
                 <div className="flex items-center justify-center gap-2 rounded-2xl bg-[var(--brand-3)]/12 px-4 py-3 text-sm font-semibold">
                   <Flame className="h-5 w-5 text-[var(--brand-3)]" /> {me.streak}-day streak! +{streakEvent.xp} bonus XP
+                </div>
+              )}
+              {speedXp > 0 && (
+                <div className="flex items-center justify-center gap-2 rounded-2xl bg-accent/15 px-4 py-3 text-sm font-semibold">
+                  <Zap className="h-5 w-5 text-accent" /> Quick thinking! {speedXp} speed bonus points
+                </div>
+              )}
+              {eventBonus && (
+                <div className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(120deg,#f59e0b22,#ec489922,#8b5cf622)] px-4 py-3 text-sm font-semibold">
+                  🎉 Event bonus: +{eventBonus.xp} XP
                 </div>
               )}
               {earnedBadges.length > 0 && (

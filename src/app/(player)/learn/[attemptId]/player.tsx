@@ -4,10 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Flag, Lock, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Flag, Lock, Volume2, VolumeX, X } from "lucide-react";
 import { toast } from "sonner";
 import type { AnswerValue, QuestionData } from "@/db/schema";
-import { describeCorrect, grade, questionPoints } from "@/lib/quiz";
+import { describeCorrect, grade, questionPoints, speedBonus } from "@/lib/quiz";
+import { playSound, setSoundEnabled, soundEnabled, subscribeSound } from "@/lib/sounds";
 import type { PlayerSlide } from "@/lib/attempts";
 import type { SlideTheme } from "@/lib/themes";
 import { SlideView } from "@/components/slides/slide-view";
@@ -40,6 +41,12 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
   const [finishing, setFinishing] = React.useState(false);
   const [played, setPlayed] = React.useState<Set<string>>(new Set());
   const [previewScore, setPreviewScore] = React.useState<number | null>(null);
+  const sound = React.useSyncExternalStore(subscribeSound, soundEnabled, () => true);
+  // When the current slide appeared (for the speed bonus in preview).
+  const shownAt = React.useRef(0);
+  React.useEffect(() => {
+    shownAt.current = Date.now();
+  }, [index]);
 
   const slide = slides[index];
   const isLast = index === slides.length - 1;
@@ -66,6 +73,7 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
       const total = qs.reduce((n, q) => n + questionPoints(q), 0);
       const earned = Object.values(feedback).reduce((n, f) => n + f.points, 0);
       setPreviewScore(total === 0 ? 100 : Math.round((earned / total) * 100));
+      playSound("finish");
       return;
     }
     setFinishing(true);
@@ -103,8 +111,11 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
       const q = preview.questions[slide.id];
       if (!q) return;
       const correct = grade(q, answer);
-      const fb: Feedback = { correct, points: correct ? questionPoints(q) : 0, explanation: q.explanation, correctAnswer: describeCorrect(q), answer };
+      const points = correct ? questionPoints(q) : 0;
+      const bonus = speedBonus(points, Date.now() - shownAt.current);
+      const fb: Feedback = { correct, points, bonus, explanation: q.explanation, correctAnswer: describeCorrect(q), answer };
       setFeedback((f) => ({ ...f, [slide.id]: fb }));
+      playSound(correct ? "correct" : "wrong");
       return;
     }
     const res = await submitAnswerAction(attemptId, slide.id, answer);
@@ -113,6 +124,7 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
       return;
     }
     setFeedback((f) => ({ ...f, [slide.id]: res.feedback }));
+    playSound(res.feedback.correct ? "correct" : "wrong");
   }
 
   if (!slide) {
@@ -160,6 +172,18 @@ export function Player({ attemptId, courseId, courseTitle, theme, slides, initia
             ))}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setSoundEnabled(!sound);
+          }}
+          className="glass grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted hover:text-fg"
+          aria-label={sound ? "Mute sounds" : "Turn sounds on"}
+          aria-pressed={!sound}
+          title={sound ? "Mute sounds" : "Turn sounds on"}
+        >
+          {sound ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+        </button>
         <div className="hidden shrink-0 text-right text-xs text-muted sm:block">
           <div className="font-semibold text-fg tabular-nums">
             {index + 1} / {slides.length}

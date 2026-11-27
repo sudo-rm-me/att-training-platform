@@ -6,6 +6,7 @@ import { teams as teamsTable, users, xpEvents, type AvatarConfig } from "@/db/sc
 import { requireUser } from "@/lib/session";
 import { levelFromXp } from "@/lib/levels";
 import { liveStreak } from "@/lib/gamification";
+import { activeEvent, eventStandings } from "@/lib/events";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { UserAvatar } from "@/components/user-avatar";
 import { cn } from "@/lib/utils";
@@ -120,6 +121,9 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
     teams.forEach((x, i) => (x.rank = i + 1));
   }
 
+  const live = await activeEvent();
+  const standings = live?.teamChallenge ? await eventStandings(live) : [];
+
   const myRow = people.find((p) => p.id === me.id);
   const top = people.slice(0, 50);
   const podium = top.slice(0, 3);
@@ -127,6 +131,39 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
   return (
     <div>
       <PageHeader eyebrow="Compete" title="Leaderboard" subtitle="Earn XP by completing courses, keeping streaks alive and unlocking badges." />
+
+      {live?.teamChallenge && (
+        <Card className="mb-8 overflow-hidden">
+          <div className="flex flex-wrap items-center gap-3 bg-[linear-gradient(120deg,#f59e0b,#ec4899_55%,#8b5cf6)] px-5 py-4 text-white">
+            <span className="text-3xl">{live.emoji}</span>
+            <div className="flex-1">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-white/85">Team challenge · {live.xpMultiplier / 100}× XP</div>
+              <div className="font-display text-xl font-bold">{live.name}</div>
+            </div>
+          </div>
+          {standings.length ? (
+            <ol>
+              {standings.slice(0, 10).map((t) => (
+                <li
+                  key={t.teamId}
+                  className={cn("flex items-center gap-4 border-t border-border/60 px-5 py-3 first:border-t-0", t.teamId === me.teamId && "bg-brand/8")}
+                >
+                  <span className="w-8 text-center font-display text-lg font-bold tabular-nums">
+                    {t.rank <= 3 ? ["🥇", "🥈", "🥉"][t.rank - 1] : t.rank}
+                  </span>
+                  <span className="flex-1 truncate font-semibold">
+                    {t.icon} {t.name} {t.teamId === me.teamId && <span className="text-xs font-bold text-brand">(your team)</span>}
+                  </span>
+                  <span className="text-xs text-muted">{t.people} taking part</span>
+                  <span className="w-24 text-right font-display font-bold tabular-nums">{t.xp.toLocaleString()} XP</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="px-5 py-4 text-sm text-muted">No team has scored yet. Finish a course to put yours on the board!</p>
+          )}
+        </Card>
+      )}
 
       <div className="mb-8 flex flex-wrap items-center gap-3">
         <div className="glass flex gap-1 rounded-2xl p-1">

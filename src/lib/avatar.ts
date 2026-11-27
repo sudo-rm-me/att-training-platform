@@ -12,6 +12,8 @@ export type AvatarItem = {
   price: number;
   /** Unlocks for free at this level */
   minLevel?: number;
+  /** Rare item: unlocks when this badge is earned */
+  badge?: string;
 };
 
 const item = (category: AvatarCategory, value: string, label: string, price = 0, minLevel?: number): AvatarItem => ({
@@ -21,6 +23,11 @@ const item = (category: AvatarCategory, value: string, label: string, price = 0,
   label,
   price,
   minLevel,
+});
+
+const rare = (category: AvatarCategory, value: string, label: string, badge: string): AvatarItem => ({
+  ...item(category, value, label),
+  badge,
 });
 
 export const AVATAR_ITEMS: AvatarItem[] = [
@@ -34,6 +41,8 @@ export const AVATAR_ITEMS: AvatarItem[] = [
   item("hair", "none", "Bald"),
   item("hair", "mohawk", "Mohawk", 120),
   item("hair", "spiky", "Spiky", 150),
+  item("hair", "ponytail", "Ponytail"),
+  item("hair", "afro", "Afro", 180),
   // Eyes
   item("eyes", "normal", "Bright"),
   item("eyes", "happy", "Happy"),
@@ -62,6 +71,8 @@ export const AVATAR_ITEMS: AvatarItem[] = [
   item("top", "jacket", "Blazer", 250),
   item("top", "hero", "Hero suit", 500),
   item("top", "royal", "Royal robe", 0, 15),
+  item("top", "labcoat", "Lab coat", 300),
+  rare("top", "astronaut", "Astronaut suit", "unstoppable"),
   // Accessories
   item("accessory", "none", "None"),
   item("accessory", "glasses", "Glasses"),
@@ -72,6 +83,11 @@ export const AVATAR_ITEMS: AvatarItem[] = [
   item("accessory", "cap", "Cap", 120),
   item("accessory", "crown", "Crown", 0, 10),
   item("accessory", "halo", "Halo", 400),
+  item("accessory", "partyhat", "Party hat", 60),
+  item("accessory", "flower", "Flower", 90),
+  item("accessory", "beanie", "Beanie", 100),
+  rare("accessory", "wizard", "Wizard hat", "scholar"),
+  rare("accessory", "laurel", "Laurel wreath", "flawless_five"),
   // Backgrounds
   item("background", "violet", "Violet"),
   item("background", "ocean", "Ocean"),
@@ -82,6 +98,9 @@ export const AVATAR_ITEMS: AvatarItem[] = [
   item("background", "galaxy", "Galaxy", 300),
   item("background", "gold", "Gold", 0, 5),
   item("background", "rainbow", "Rainbow", 0, 12),
+  item("background", "forest", "Forest", 120),
+  item("background", "neon", "Neon", 200),
+  rare("background", "aurora", "Aurora", "appreciated"),
 ];
 
 export const ITEM_BY_KEY = new Map(AVATAR_ITEMS.map((i) => [i.key, i]));
@@ -90,7 +109,7 @@ export const SKIN_TONES = ["#ffe0c7", "#f8cba6", "#e8b08a", "#c98e64", "#a26a45"
 export const HAIR_COLORS = ["#2b2118", "#5a3a22", "#a0673a", "#e3b35c", "#f2e2b8", "#c2462e", "#8b8b97", "#7c5cff", "#ff6fb1", "#2fb5a8"];
 export const TOP_COLORS = ["#6d4aff", "#ff5d8f", "#22b5a0", "#ffb547", "#3b82f6", "#1f2937", "#ef4444", "#f5f5f5"];
 
-export const BACKGROUNDS: Record<string, [string, string] | "galaxy" | "rainbow"> = {
+export const BACKGROUNDS: Record<string, [string, string] | "galaxy" | "rainbow" | "aurora"> = {
   violet: ["#a78bfa", "#6d4aff"],
   ocean: ["#67e8f9", "#2563eb"],
   mint: ["#bbf7d0", "#34d399"],
@@ -98,6 +117,9 @@ export const BACKGROUNDS: Record<string, [string, string] | "galaxy" | "rainbow"
   sky: ["#e0f2fe", "#7dd3fc"],
   sunset: ["#fde68a", "#f43f5e"],
   gold: ["#fef08a", "#d97706"],
+  forest: ["#86efac", "#166534"],
+  neon: ["#f0abfc", "#0891b2"],
+  aurora: "aurora",
   galaxy: "galaxy",
   rainbow: "rainbow",
 };
@@ -120,7 +142,8 @@ export function starterAvatar(seed: string): AvatarConfig {
   let h = 0;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const pick = <T,>(arr: T[], salt: number) => arr[(h >>> salt) % arr.length];
-  const free = (cat: AvatarCategory) => AVATAR_ITEMS.filter((i) => i.category === cat && i.price === 0 && !i.minLevel).map((i) => i.value);
+  const free = (cat: AvatarCategory) =>
+    AVATAR_ITEMS.filter((i) => i.category === cat && i.price === 0 && !i.minLevel && !i.badge).map((i) => i.value);
   return {
     skin: pick(SKIN_TONES, 1),
     hair: pick(free("hair").filter((v) => v !== "none"), 3),
@@ -145,9 +168,16 @@ export const CATEGORY_LABELS: Record<AvatarCategory, string> = {
   background: "Background",
 };
 
-/** Whether the user may wear an item (free, level-unlocked or purchased). */
+/** Item keys unlocked by the badges a user holds. */
+export function badgeItemKeys(badges: Iterable<string>) {
+  const have = new Set(badges);
+  return AVATAR_ITEMS.filter((i) => i.badge && have.has(i.badge)).map((i) => i.key);
+}
+
+/** Whether the user may wear an item (free, level-unlocked, purchased or badge reward). */
 export function isUnlocked(it: AvatarItem, level: number, owned: Set<string>) {
   if (owned.has(it.key)) return true;
+  if (it.badge) return false;
   if (it.minLevel != null) return level >= it.minLevel;
   return it.price === 0;
 }

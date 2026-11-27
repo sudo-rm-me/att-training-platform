@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import type { DB } from "@/db";
 import { users, xpEvents } from "@/db/schema";
 
-type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0] | DB;
+export type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0] | DB;
 
 /** Record an XP/coin grant in the ledger and update the user's totals. */
 export async function grantXp(

@@ -14,6 +14,8 @@ import { CourseCard } from "@/components/course-card";
 import { UserAvatar } from "@/components/user-avatar";
 import { DueChip } from "@/components/due-chip";
 import { getMyAssignments } from "@/lib/assignments";
+import { bannerEvent, featuredEvent } from "@/lib/events";
+import { EventBanner } from "@/components/event-banner";
 
 export const metadata = { title: "Dashboard" };
 
@@ -27,7 +29,11 @@ export default async function DashboardPage(props: PageProps<"/">) {
   const sp = await props.searchParams;
   const lvl = levelFromXp(user.xp);
   const firstName = user.name.split(" ")[0];
-  const [catalog, assigned] = await Promise.all([listCatalog(user.id), getMyAssignments(user.id, user.department, user.teamId)]);
+  const [catalog, assigned, featured] = await Promise.all([
+    listCatalog(user.id),
+    getMyAssignments(user.id, user.department, user.teamId),
+    featuredEvent(),
+  ]);
   const openAssigned = assigned.filter((a) => a.state !== "done");
   const assignedIds = new Set(openAssigned.map((a) => a.course.id));
   const overdue = openAssigned.filter((a) => a.state === "overdue");
@@ -78,6 +84,8 @@ export default async function DashboardPage(props: PageProps<"/">) {
           </div>
         </div>
       </Card>
+
+      {featured && <EventBanner event={bannerEvent(featured.event)} initiallyLive={featured.live} />}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Total XP" value={user.xp.toLocaleString()} icon={<Sparkles className="h-5 w-5" />} />

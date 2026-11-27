@@ -151,3 +151,11 @@ export const QUESTION_TYPE_LABEL: Record<QuestionData["type"], string> = {
   matching: "Match the pairs",
   acknowledge: "Acknowledgement",
 };
+
+/** Answer fast for bonus XP: +50% of the points within 15s, +25% within 30s. */
+export function speedBonus(points: number, elapsedMs: number | null) {
+  if (!points || elapsedMs == null || elapsedMs < 0) return 0;
+  if (elapsedMs <= 15_000) return Math.ceil(points * 0.5);
+  if (elapsedMs <= 30_000) return Math.ceil(points * 0.25);
+  return 0;
+}

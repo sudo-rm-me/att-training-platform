@@ -47,6 +47,14 @@ export function AvatarSvg({ config, className, title }: { config?: AvatarConfig 
             <stop offset="1" stopColor="#020617" />
           </radialGradient>
         )}
+        {bg === "aurora" && (
+          <linearGradient id={`${id}-bg`} x1="0" y1="1" x2="0.4" y2="0">
+            <stop offset="0" stopColor="#0f172a" />
+            <stop offset="0.45" stopColor="#134e4a" />
+            <stop offset="0.75" stopColor="#22d3ee" />
+            <stop offset="1" stopColor="#a78bfa" />
+          </linearGradient>
+        )}
         {bg === "rainbow" && (
           <linearGradient id={`${id}-bg`} x1="0" y1="0" x2="1" y2="1">
             {["#f43f5e", "#f97316", "#facc15", "#22c55e", "#3b82f6", "#a855f7"].map((col, i) => (
@@ -72,6 +80,23 @@ export function AvatarSvg({ config, className, title }: { config?: AvatarConfig 
             [70, 25, 1],
             [110, 18, 1.4],
           ].map(([x, y, r]) => <circle key={`${x}-${y}`} cx={x} cy={y} r={r} fill="#fff" opacity="0.9" />)}
+        {bg === "aurora" && (
+          <g opacity="0.55" fill="none" strokeLinecap="round">
+            <path d="M-10 70 C40 30 80 90 130 40 S200 30 210 20" stroke="#5eead4" strokeWidth="14" />
+            <path d="M-10 95 C50 60 90 110 140 70 S200 60 210 50" stroke="#c4b5fd" strokeWidth="8" />
+          </g>
+        )}
+        {c.background === "forest" && (
+          <g fill="#14532d" opacity="0.55">
+            <path d="M10 200 L35 120 L60 200 Z M150 200 L175 110 L200 200 Z M-10 200 L12 140 L34 200 Z" />
+          </g>
+        )}
+        {c.background === "neon" && (
+          <g fill="none" stroke="#fff" strokeOpacity="0.35" strokeWidth="2">
+            <circle cx="100" cy="100" r="70" />
+            <circle cx="100" cy="100" r="88" />
+          </g>
+        )}
         {/* soft shine */}
         <ellipse cx="60" cy="40" rx="70" ry="40" fill="#fff" opacity="0.12" />
 
@@ -112,6 +137,16 @@ function HairBack({ style, color, dark }: { style: string; color: string; dark: 
       return <path d="M52 96 C48 50 76 32 100 32 C126 32 152 50 148 96 L150 124 C130 130 70 130 50 124 Z" fill={dark} />;
     case "bun":
       return <circle cx="100" cy="34" r="18" fill={color} />;
+    case "ponytail":
+      return <path d="M134 64 C170 70 172 120 156 150 C150 124 146 100 132 86 Z" fill={dark} />;
+    case "afro":
+      return (
+        <g fill={dark}>
+          <circle cx="100" cy="70" r="62" />
+          <circle cx="50" cy="96" r="22" />
+          <circle cx="150" cy="96" r="22" />
+        </g>
+      );
     case "curly":
       return (
         <g fill={dark}>
@@ -162,6 +197,29 @@ function HairFront({ style, color, dark }: { style: string; color: string; dark:
             [136, 64, 14],
             [58, 80, 11],
             [142, 80, 11],
+          ].map(([x, y, r]) => (
+            <circle key={`${x}${y}`} cx={x} cy={y} r={r} />
+          ))}
+        </g>
+      );
+    case "ponytail":
+      return (
+        <>
+          <path d="M57 86 C54 50 78 36 102 37 C128 38 148 54 143 86 C134 66 116 56 96 58 C80 60 64 70 57 86 Z" fill={color} />
+          <circle cx="138" cy="66" r="6" fill="#ff5d8f" />
+        </>
+      );
+    case "afro":
+      return (
+        <g fill={color}>
+          {[
+            [62, 62, 16],
+            [78, 46, 17],
+            [100, 40, 18],
+            [122, 46, 17],
+            [138, 62, 16],
+            [54, 80, 12],
+            [146, 80, 12],
           ].map(([x, y, r]) => (
             <circle key={`${x}${y}`} cx={x} cy={y} r={r} />
           ))}
@@ -368,6 +426,28 @@ function Top({ style, color, dark, skin, id }: { style: string; color: string; d
           <circle cx="100" cy="176" r="6" fill={`url(#${id}-gold)`} />
         </g>
       );
+    case "labcoat":
+      return (
+        <g>
+          <path d={body} fill={color} />
+          <path d="M34 200 C34 162 62 142 92 141 L92 200 Z M166 200 C166 162 138 142 108 141 L108 200 Z" fill="#f8fafc" />
+          <path d="M92 141 L82 168 L92 176 Z M108 141 L118 168 L108 176 Z" fill="#e2e8f0" />
+          <rect x="124" y="168" width="18" height="12" rx="2" fill="#e2e8f0" />
+          <path d="M128 166 v6 M134 165 v7" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+        </g>
+      );
+    case "astronaut":
+      return (
+        <g>
+          <path d={body} fill="#f1f5f9" />
+          <path d="M66 148 C80 158 120 158 134 148 L136 156 C120 168 80 168 64 156 Z" fill="#94a3b8" />
+          <rect x="82" y="170" width="36" height="22" rx="5" fill="#cbd5e1" />
+          <circle cx="92" cy="181" r="4" fill="#ef4444" />
+          <circle cx="104" cy="181" r="4" fill="#22c55e" />
+          <rect x="111" y="177" width="4" height="8" rx="1" fill="#3b82f6" />
+          <path d="M46 186 l14 -4 M154 186 l-14 -4" stroke={color} strokeWidth="6" strokeLinecap="round" />
+        </g>
+      );
     default:
       return (
         <g>
@@ -440,6 +520,54 @@ function Accessory({ style, id }: { style: string; id: string }) {
       );
     case "halo":
       return <ellipse cx="100" cy="24" rx="30" ry="8" fill="none" stroke="#fde047" strokeWidth="5" opacity="0.95" />;
+    case "partyhat":
+      return (
+        <g>
+          <path d="M84 50 L104 6 L122 48 Z" fill="#ec4899" />
+          <path d="M90 37 L117 37 M96 23 L111 23" stroke="#fde047" strokeWidth="5" />
+          <circle cx="104" cy="6" r="6" fill="#22d3ee" />
+        </g>
+      );
+    case "flower":
+      return (
+        <g transform="translate(132 56)">
+          {[0, 72, 144, 216, 288].map((a) => (
+            <ellipse key={a} cx="0" cy="-9" rx="6" ry="9" fill="#f9a8d4" transform={`rotate(${a})`} />
+          ))}
+          <circle r="5" fill="#fde047" />
+        </g>
+      );
+    case "beanie":
+      return (
+        <g>
+          <path d="M54 76 C52 34 148 34 146 76 Z" fill="#f97316" />
+          <rect x="52" y="68" width="96" height="14" rx="7" fill="#c2410c" />
+          <path d="M66 70 v10 M80 70 v10 M94 70 v10 M108 70 v10 M122 70 v10 M136 70 v10" stroke="#9a3412" strokeWidth="2" />
+          <circle cx="100" cy="32" r="9" fill="#fed7aa" />
+        </g>
+      );
+    case "wizard":
+      return (
+        <g>
+          <path d="M60 62 C80 54 120 54 140 62 L112 2 C100 10 96 30 60 62 Z" fill="#4338ca" />
+          <ellipse cx="100" cy="62" rx="52" ry="9" fill="#3730a3" />
+          <path d="M100 30 l3 6 l7 1 l-5 5 l1 7 l-6 -3 l-6 3 l1 -7 l-5 -5 l7 -1 z" fill={`url(#${id}-gold)`} />
+          <circle cx="86" cy="46" r="2" fill="#fde68a" />
+          <circle cx="118" cy="40" r="1.6" fill="#fde68a" />
+        </g>
+      );
+    case "laurel":
+      return (
+        <g fill="#65a30d">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <React.Fragment key={i}>
+              <ellipse cx={62 + i * 7} cy={66 - i * 7} rx="5" ry="10" transform={`rotate(${-50 + i * 10} ${62 + i * 7} ${66 - i * 7})`} />
+              <ellipse cx={138 - i * 7} cy={66 - i * 7} rx="5" ry="10" transform={`rotate(${50 - i * 10} ${138 - i * 7} ${66 - i * 7})`} />
+            </React.Fragment>
+          ))}
+          <circle cx="100" cy="34" r="4" fill={`url(#${id}-gold)`} />
+        </g>
+      );
     default:
       return null;
   }

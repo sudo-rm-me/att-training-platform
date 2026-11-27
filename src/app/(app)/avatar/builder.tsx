@@ -154,7 +154,7 @@ export function AvatarBuilder({
                       {!unlocked && (
                         <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-card-solid px-1.5 py-0.5 text-[10px] font-bold shadow">
                           <Lock className="h-3 w-3" />
-                          {it.minLevel ? `Lv ${it.minLevel}` : `${it.price}🪙`}
+                          {it.badge ? "🏅 Badge" : it.minLevel ? `Lv ${it.minLevel}` : `${it.price}🪙`}
                         </span>
                       )}
                     </button>

@@ -12,9 +12,13 @@ import {
   type Attempt,
   type Course,
 } from "@/db/schema";
-import { describeCorrect, grade, questionPoints, toClientQuestion, type ClientQuestion } from "./quiz";
+import { describeCorrect, grade, questionPoints, speedBonus, toClientQuestion, type ClientQuestion } from "./quiz";
+
+export { speedBonus };
 import { coinsForXp, grantXp, PERFECT_BONUS_XP } from "./rewards";
 import { ensureVersion, toVersionSlide } from "./versions";
+import { grantEventBonus } from "./events";
+
 
 /** Questions that count towards the score (acknowledgements always appear but aren't drawn). */
 const scored = (s: VersionSlide) => s.kind === "question" && !!s.question && s.question.type !== "acknowledge";
@@ -101,6 +105,8 @@ export type AnswerFeedback = {
   explanation?: string;
   correctAnswer: string[];
   answer: AnswerValue;
+  /** Speed bonus XP for a quick correct answer. */
+  bonus?: number;
 };
 
 async function loadOwnedAttempt(attemptId: string, userId: string) {
@@ -128,6 +134,7 @@ export async function getPlayerData(attemptId: string, userId: string) {
     feedback[a.slideId] = {
       correct: a.correct,
       points: a.points,
+      bonus: a.bonus,
       explanation: s.question.explanation,
       correctAnswer: describeCorrect(s.question),
       answer: a.answer,
@@ -167,6 +174,7 @@ export async function answerQuestion(attemptId: string, userId: string, slideId:
     return {
       correct: existing.correct,
       points: existing.points,
+      bonus: existing.bonus,
       explanation: q.explanation,
       correctAnswer: describeCorrect(q),
       answer: existing.answer,
@@ -175,16 +183,20 @@ export async function answerQuestion(attemptId: string, userId: string, slideId:
 
   const correct = grade(q, answer);
   const points = correct ? questionPoints(q) : 0;
-  await db.insert(attemptAnswers).values({ attemptId, slideId, answer, correct, points }).onConflictDoNothing();
+  // The timer starts when the player moved onto this slide.
+  const list = await attemptSlides(attempt);
+  const onThisSlide = list[attempt.currentSlide]?.id === slideId && attempt.slideShownAt;
+  const bonus = onThisSlide ? speedBonus(points, Date.now() - attempt.slideShownAt!.getTime()) : 0;
+  await db.insert(attemptAnswers).values({ attemptId, slideId, answer, correct, points, bonus }).onConflictDoNothing();
 
-  return { correct, points, explanation: q.explanation, correctAnswer: describeCorrect(q), answer } satisfies AnswerFeedback;
+  return { correct, points, bonus, explanation: q.explanation, correctAnswer: describeCorrect(q), answer } satisfies AnswerFeedback;
 }
 
 export async function saveProgress(attemptId: string, userId: string, slideIndex: number) {
   const db = await getDb();
   await db
     .update(attempts)
-    .set({ currentSlide: Math.max(0, Math.floor(slideIndex)) })
+    .set({ currentSlide: Math.max(0, Math.floor(slideIndex)), slideShownAt: new Date() })
     .where(and(eq(attempts.id, attemptId), eq(attempts.userId, userId), isNull(attempts.completedAt)));
 }
 
@@ -207,6 +219,7 @@ export async function completeAttempt(attemptId: string, userId: string): Promis
   const answers = (await db.select().from(attemptAnswers).where(eq(attemptAnswers.attemptId, attemptId))).filter((a) => ids.has(a.slideId));
   const totalPoints = questions.reduce((n, s) => n + questionPoints(s.question!), 0);
   const earnedPoints = answers.reduce((n, a) => n + a.points, 0);
+  const speedXp = answers.reduce((n, a) => n + a.bonus, 0);
   const correctCount = answers.filter((a) => a.correct).length;
   const score = totalPoints === 0 ? 100 : Math.round((earnedPoints / totalPoints) * 100);
   const passed = score >= course.passMark;
@@ -243,7 +256,8 @@ export async function completeAttempt(attemptId: string, userId: string): Promis
 
     const alreadyAwarded = Number(prev.xp ?? 0);
     const potential =
-      earnedPoints + (passed ? course.completionXp : 0) + (passed && score === 100 && questions.length > 0 ? PERFECT_BONUS_XP : 0);
+      earnedPoints +
+      speedXp + (passed ? course.completionXp : 0) + (passed && score === 100 && questions.length > 0 ? PERFECT_BONUS_XP : 0);
     // Retakes only earn XP for improving on the best result so far.
     const xpAwarded = Math.max(0, potential - alreadyAwarded);
     const coinsAwarded = coinsForXp(xpAwarded);
@@ -254,6 +268,8 @@ export async function completeAttempt(attemptId: string, userId: string): Promis
       .where(eq(attempts.id, attemptId))
       .returning();
     await grantXp(tx, userId, xpAwarded, coinsAwarded, passed ? "course_passed" : "course_attempt", attemptId);
+    // Seasonal events multiply the XP earned (recorded separately so retakes stay fair).
+    await grantEventBonus(tx, userId, xpAwarded, attemptId);
 
     return { attempt: final, xpAwarded, coinsAwarded, firstPass, newlyCompleted: true };
   });

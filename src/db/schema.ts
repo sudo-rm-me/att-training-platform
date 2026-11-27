@@ -294,3 +294,26 @@ export const assignments = pgTable(
   ],
 );
 export type Assignment = typeof assignments.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Audit log (who changed what)
+// ---------------------------------------------------------------------------
+
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    /** Denormalised so entries stay readable after a user is removed. */
+    actorName: text("actor_name"),
+    /** e.g. "role.change", "course.publish", "assignment.create" */
+    action: text("action").notNull(),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
+    summary: text("summary").notNull(),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("audit_created_idx").on(t.createdAt), index("audit_action_idx").on(t.action, t.createdAt)],
+);
+export type AuditEntry = typeof auditLog.$inferSelect;

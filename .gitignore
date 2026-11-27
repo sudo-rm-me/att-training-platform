@@ -46,3 +46,8 @@ next-env.d.ts
 
 # local tooling
 /.claude
+
+# test output
+/.next-e2e
+/test-results
+/playwright-report

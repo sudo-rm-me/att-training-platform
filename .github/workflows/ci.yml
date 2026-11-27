@@ -22,9 +22,31 @@ jobs:
       - run: npx next typegen
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
         env:
           AUTH_SECRET: ci-build-only-not-a-real-secret
+
+  e2e:
+    name: End-to-end tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          CI: "true"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
 
   infra:
     name: Validate Bicep

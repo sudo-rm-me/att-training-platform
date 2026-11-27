@@ -9,7 +9,8 @@ export type NavIcon =
   | "team"
   | "assignments"
   | "studio"
-  | "users";
+  | "users"
+  | "audit";
 
 export type NavItem = { href: string; label: string; icon: NavIcon };
 export type NavSection = { title: string; items: NavItem[] };
@@ -49,7 +50,13 @@ export function buildNav(p: NavPerms): NavSection[] {
     sections.push({ title: "Create", items: [{ href: "/studio", label: "Course studio", icon: "studio" }] });
   }
   if (p.admin) {
-    sections.push({ title: "Admin", items: [{ href: "/admin/users", label: "People & roles", icon: "users" }] });
+    sections.push({
+      title: "Admin",
+      items: [
+        { href: "/admin/users", label: "People & roles", icon: "users" },
+        { href: "/admin/audit", label: "Audit log", icon: "audit" },
+      ],
+    });
   }
   return sections;
 }

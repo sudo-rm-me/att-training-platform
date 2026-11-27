@@ -26,6 +26,9 @@ export function buildNav(p: NavPerms): NavSection[] {
       ],
     },
   ];
+  if (p.author) {
+    sections.push({ title: "Create", items: [{ href: "/studio", label: "Course studio", icon: "studio" }] });
+  }
   if (p.admin) {
     sections.push({ title: "Admin", items: [{ href: "/admin/users", label: "People & roles", icon: "users" }] });
   }

@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { eq } from "drizzle-orm";
 import { assignments, attempts, teamLeads, teams, users, type Course } from "@/db/schema";
 import { installSampleCourse } from "@/lib/sample-course";
-import { getMyAssignments, managedPeople, passedPairs } from "@/lib/assignments";
+import { getMyAssignments, latestPasses, managedPeople } from "@/lib/assignments";
 import { scopeFor } from "@/lib/teams";
 import { makeUser } from "../support/db";
 
@@ -29,7 +29,7 @@ describe("assignments", () => {
     expect((await getMyAssignments(outsider.id, outsider.department, outsider.teamId)).map((m) => m.course.id)).not.toContain(course.id);
 
     await db.insert(attempts).values({ userId: member.id, courseId: course.id, completedAt: new Date(), score: 90, passed: true });
-    expect((await passedPairs([member.id])).has(`${member.id}:${course.id}`)).toBe(true);
+    expect((await latestPasses([member.id])).has(`${member.id}:${course.id}`)).toBe(true);
   });
 
   it("shows overdue training as overdue", async () => {

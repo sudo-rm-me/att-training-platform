@@ -114,11 +114,20 @@ export function FromDepartmentsButton() {
   );
 }
 
-export function EditTeamForm({ team }: { team: { id: string; name: string; icon: string; description: string } }) {
+export function EditTeamForm({ team }: { team: { id: string; name: string; icon: string; description: string; webhookUrl: string | null } }) {
   const [pending, run] = useRun();
   return (
-    <form className="space-y-4" action={(fd) => run(() => updateTeamAction(team.id, read(fd)))}>
+    <form className="space-y-4" action={(fd) => run(() => updateTeamAction(team.id, { ...read(fd), webhookUrl: String(fd.get("webhookUrl") ?? "") }))}>
       <TeamFields name={team.name} icon={team.icon} description={team.description} />
+      <div>
+        <Label htmlFor="team-webhook">
+          Teams channel webhook <span className="font-normal text-muted">(optional)</span>
+        </Label>
+        <Input id="team-webhook" name="webhookUrl" type="url" defaultValue={team.webhookUrl ?? ""} placeholder="https://….logic.azure.com/…" />
+        <p className="mt-1 text-xs text-muted">
+          In Teams, add the Workflow “Post to a channel when a webhook request is received” and paste its URL. The team gets a weekly progress post.
+        </p>
+      </div>
       <div className="flex gap-2">
         <Button disabled={pending} className="flex-1">
           <Save className="h-4 w-4" /> Save

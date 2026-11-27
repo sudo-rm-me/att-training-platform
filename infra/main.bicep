@@ -53,6 +53,19 @@ param appTimezone string = 'Europe/London'
 @maxValue(10)
 param minReplicas int = 1
 
+@description('Mailbox that sends reminder emails via Microsoft Graph (needs the Mail.Send application permission). Empty = in-app reminders only.')
+param mailSender string = ''
+
+@description('When the daily reminders job runs (cron, UTC).')
+param remindersSchedule string = '0 7 * * *'
+
+@description('Days overdue before a manager digest flags someone as escalated.')
+param escalateAfterDays int = 14
+
+@secure()
+@description('Shared secret for the reminders job. Leave empty to derive one from authSecret.')
+param cronSecret string = ''
+
 @minValue(1)
 @maxValue(30)
 param maxReplicas int = 3
@@ -269,6 +282,14 @@ resource secretEntra 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   properties: { value: entraClientSecret }
 }
 
+var cronSecretValue = empty(cronSecret) ? '${uniqueString(authSecret, 'cron-1')}${uniqueString(authSecret, 'cron-2')}${uniqueString(authSecret, 'cron-3')}' : cronSecret
+
+resource secretCron 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: vault
+  name: 'cron-secret'
+  properties: { value: cronSecretValue }
+}
+
 resource secretDb 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: vault
   name: 'database-url'
@@ -349,7 +370,14 @@ var env = [
   { name: 'AZURE_STORAGE_CONTAINER', value: mediaContainer }
   { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
   { name: 'APP_TIMEZONE', value: appTimezone }
+  { name: 'APP_URL', value: appUrl }
+  { name: 'CRON_SECRET', secretRef: 'cron-secret' }
+  { name: 'MAIL_SENDER', value: mailSender }
+  { name: 'ESCALATE_AFTER_DAYS', value: string(escalateAfterDays) }
 ]
+
+// The app's public URL is known before it exists: <name>.<environment domain>.
+var appUrl = 'https://${names.app}.${appEnv.properties.defaultDomain}'
 
 resource app 'Microsoft.App/containerApps@2024-03-01' = {
   name: names.app
@@ -380,6 +408,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'auth-secret', keyVaultUrl: secretAuth.properties.secretUri, identity: identity.id }
         { name: 'entra-client-secret', keyVaultUrl: secretEntra.properties.secretUri, identity: identity.id }
         { name: 'database-url', keyVaultUrl: secretDb.properties.secretUri, identity: identity.id }
+        { name: 'cron-secret', keyVaultUrl: secretCron.properties.secretUri, identity: identity.id }
       ]
     }
     template: {
@@ -413,6 +442,55 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
     blobContributor
     database
     allowAzure
+  ]
+}
+
+// Daily reminders: a tiny scheduled job that calls the app's cron endpoint.
+resource remindersJob 'Microsoft.App/jobs@2024-03-01' = if (!bootstrap) {
+  name: take('${names.app}-reminders', 32)
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${identity.id}': {} }
+  }
+  properties: {
+    environmentId: appEnv.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 300
+      replicaRetryLimit: 2
+      scheduleTriggerConfig: {
+        cronExpression: remindersSchedule
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      secrets: [
+        { name: 'cron-secret', keyVaultUrl: secretCron.properties.secretUri, identity: identity.id }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'reminders'
+          image: 'docker.io/curlimages/curl:8.11.1'
+          command: ['sh', '-c', 'curl -fsS --retry 3 --retry-delay 20 --max-time 240 -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/reminders"']
+          env: [
+            { name: 'CRON_SECRET', secretRef: 'cron-secret' }
+            { name: 'APP_URL', value: appUrl }
+          ]
+          resources: {
+            cpu: json('0.25')
+            memory: '0.5Gi'
+          }
+        }
+      ]
+    }
+  }
+  dependsOn: [
+    vaultReader
+    app
   ]
 }
 

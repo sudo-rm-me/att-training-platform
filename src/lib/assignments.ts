@@ -7,9 +7,21 @@ import { listCatalog, type CatalogCourse } from "@/lib/courses";
 import type { Scope } from "@/lib/teams";
 
 export const DUE_SOON_DAYS = 7;
+/** Recurring training: start nudging this many days before a pass expires. */
+export const RENEW_WINDOW_DAYS = 30;
 const DAY = 86_400_000;
 
-export type DueState = "done" | "overdue" | "due_soon" | "open";
+/**
+ * done     – complete (and still valid, for recurring training)
+ * renew    – complete, but the pass expires soon: retake to renew
+ * overdue  – not complete and past its due date (or the pass expired)
+ * due_soon – not complete, due within a week
+ * open     – not complete, no pressure yet
+ */
+export type DueState = "done" | "renew" | "overdue" | "due_soon" | "open";
+
+/** Counts as complete for compliance figures. */
+export const isCompliant = (s: DueState) => s === "done" || s === "renew";
 
 export function dueState(dueAt: Date | null, done: boolean, now = new Date()): DueState {
   if (done) return "done";
@@ -17,6 +29,54 @@ export function dueState(dueAt: Date | null, done: boolean, now = new Date()): D
   if (dueAt.getTime() < now.getTime()) return "overdue";
   if (dueAt.getTime() - now.getTime() < DUE_SOON_DAYS * DAY) return "due_soon";
   return "open";
+}
+
+export function addMonths(d: Date, months: number) {
+  const x = new Date(d);
+  const day = x.getUTCDate();
+  x.setUTCMonth(x.getUTCMonth() + months);
+  // Clamp e.g. 31 Jan + 1 month to the end of February.
+  if (x.getUTCDate() < day) x.setUTCDate(0);
+  return x;
+}
+
+export type Requirement = { dueAt: Date | null; recurMonths: number | null; note: string | null };
+export type RequirementStatus = {
+  state: DueState;
+  /** The date that matters now: due date, or when the current pass expires. */
+  dueAt: Date | null;
+  /** When the latest pass stops counting (recurring training only). */
+  validUntil: Date | null;
+};
+
+/** Where someone stands on one requirement, given their most recent pass. */
+export function requirementStatus(req: Pick<Requirement, "dueAt" | "recurMonths">, lastPass: Date | null, now = new Date()): RequirementStatus {
+  if (lastPass) {
+    if (!req.recurMonths) return { state: "done", dueAt: null, validUntil: null };
+    const validUntil = addMonths(lastPass, req.recurMonths);
+    if (validUntil.getTime() <= now.getTime()) return { state: "overdue", dueAt: validUntil, validUntil };
+    const renewSoon = validUntil.getTime() - now.getTime() < RENEW_WINDOW_DAYS * DAY;
+    return { state: renewSoon ? "renew" : "done", dueAt: validUntil, validUntil };
+  }
+  return { state: dueState(req.dueAt, false, now), dueAt: req.dueAt, validUntil: null };
+}
+
+/** Human label for a status chip. */
+export function statusText(st: RequirementStatus, now = new Date()) {
+  switch (st.state) {
+    case "done":
+      return st.validUntil ? `Done · valid to ${shortDate(st.validUntil)}` : "Completed";
+    case "renew":
+      return `Renew by ${shortDate(st.validUntil!)}`;
+    case "overdue":
+      return st.validUntil ? `Expired ${shortDate(st.validUntil)}` : dueText(st.dueAt, now);
+    default:
+      return dueText(st.dueAt, now);
+  }
+}
+
+function shortDate(d: Date) {
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: process.env.APP_TIMEZONE || "Europe/London" });
 }
 
 /** "Due in 3 days", "Overdue by 2 days", "Due today" */
@@ -107,49 +167,70 @@ export async function publishedAssignments() {
 
 /** Effective (merged) assignment per course for a user: the earliest due date wins. */
 export function mergeForUser(all: Assignment[], u: Member) {
-  const out = new Map<string, { dueAt: Date | null; note: string | null }>();
+  const out = new Map<string, Requirement>();
   for (const a of all) {
     if (!appliesTo(a, u)) continue;
     const prev = out.get(a.courseId);
-    if (!prev) out.set(a.courseId, { dueAt: a.dueAt, note: a.note });
-    else if (a.dueAt && (!prev.dueAt || a.dueAt < prev.dueAt)) out.set(a.courseId, { dueAt: a.dueAt, note: a.note ?? prev.note });
+    if (!prev) {
+      out.set(a.courseId, { dueAt: a.dueAt, note: a.note, recurMonths: a.recurMonths });
+      continue;
+    }
+    // Strictest wins: earliest due date, shortest renewal period.
+    if (a.dueAt && (!prev.dueAt || a.dueAt < prev.dueAt)) {
+      prev.dueAt = a.dueAt;
+      prev.note = a.note ?? prev.note;
+    }
+    if (a.recurMonths && (!prev.recurMonths || a.recurMonths < prev.recurMonths)) prev.recurMonths = a.recurMonths;
   }
   return out;
 }
 
-/** (userId, courseId) pairs with at least one passed attempt. */
-export async function passedPairs(userIds: string[]) {
-  const set = new Set<string>();
-  if (userIds.length === 0) return set;
+/** Most recent pass per "userId:courseId". */
+export async function latestPasses(userIds: string[]) {
+  const out = new Map<string, Date>();
+  if (userIds.length === 0) return out;
   const db = await getDb();
   const rows = await db
-    .selectDistinct({ userId: attempts.userId, courseId: attempts.courseId })
+    .select({ userId: attempts.userId, courseId: attempts.courseId, at: sql<Date>`max(${attempts.completedAt})`.mapWith((v) => new Date(v)) })
     .from(attempts)
-    .where(and(inArray(attempts.userId, userIds), eq(attempts.passed, true)));
-  for (const r of rows) set.add(`${r.userId}:${r.courseId}`);
-  return set;
+    .where(and(inArray(attempts.userId, userIds), eq(attempts.passed, true)))
+    .groupBy(attempts.userId, attempts.courseId);
+  for (const r of rows) out.set(`${r.userId}:${r.courseId}`, r.at);
+  return out;
 }
 
 export type MyAssignment = {
   course: CatalogCourse;
   dueAt: Date | null;
   note: string | null;
+  recurMonths: number | null;
+  validUntil: Date | null;
   state: DueState;
+  text: string;
 };
 
-const ORDER: Record<DueState, number> = { overdue: 0, due_soon: 1, open: 2, done: 3 };
+const ORDER: Record<DueState, number> = { overdue: 0, due_soon: 1, renew: 2, open: 3, done: 4 };
 
 /** The signed-in user's assigned courses, most urgent first. */
 export const getMyAssignments = cache(
   async (userId: string, department: string | null, teamId: string | null): Promise<MyAssignment[]> => {
-  const [all, catalog] = await Promise.all([publishedAssignments(), listCatalog(userId)]);
+  const [all, catalog, passes] = await Promise.all([publishedAssignments(), listCatalog(userId), latestPasses([userId])]);
   const mine = mergeForUser(all, { id: userId, department, teamId });
   const now = new Date();
   return catalog
     .filter((c) => mine.has(c.id))
     .map((c) => {
-      const m = mine.get(c.id)!;
-      return { course: c, ...m, state: dueState(m.dueAt, c.progress.status === "completed", now) };
+      const req = mine.get(c.id)!;
+      const st = requirementStatus(req, passes.get(`${userId}:${c.id}`) ?? null, now);
+      return {
+        course: c,
+        note: req.note,
+        recurMonths: req.recurMonths,
+        dueAt: st.dueAt,
+        validUntil: st.validUntil,
+        state: st.state,
+        text: statusText(st, now),
+      };
     })
     .sort(
       (a, b) =>

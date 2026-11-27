@@ -7,6 +7,7 @@ import {
   Award,
   BookOpen,
   Boxes,
+  BellRing,
   ClipboardList,
   GraduationCap,
   History,
@@ -38,6 +39,7 @@ const ICONS: Record<NavIcon, React.ComponentType<{ className?: string }>> = {
   users: Users,
   audit: History,
   teams: Boxes,
+  reminders: BellRing,
 };
 
 function isActive(pathname: string, href: string) {

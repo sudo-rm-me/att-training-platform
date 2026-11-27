@@ -3,7 +3,7 @@ import { Building2, ClipboardList, Globe2, User as UserIcon, Users } from "lucid
 import { getDb } from "@/db";
 import { assignments, courses, users } from "@/db/schema";
 import { requirePermission } from "@/lib/session";
-import { appliesTo, canTarget, dueState, dueText, listDepartments, managedPeople, passedPairs } from "@/lib/assignments";
+import { appliesTo, canTarget, dueState, dueText, isCompliant, latestPasses, listDepartments, managedPeople, requirementStatus } from "@/lib/assignments";
 import { listTeams, scopeFor, teamsByIds } from "@/lib/teams";
 import { dayKey } from "@/lib/gamification";
 import { Card, EmptyState, PageHeader, Progress } from "@/components/ui";
@@ -60,7 +60,7 @@ export default async function AssignmentsPage() {
     return people.some((p) => appliesTo(a, p));
   });
 
-  const passed = await passedPairs(people.map((p) => p.id));
+  const passes = await latestPasses(people.map((p) => p.id));
   const now = new Date();
 
   const noTeam = !isAdmin && people.length === 0;
@@ -113,7 +113,7 @@ export default async function AssignmentsPage() {
             ) : (
               visible.map(({ a, courseTitle, courseIcon, courseStatus }) => {
                 const targets = people.filter((p) => appliesTo(a, p));
-                const done = targets.filter((p) => passed.has(`${p.id}:${a.courseId}`)).length;
+                const done = targets.filter((p) => isCompliant(requirementStatus(a, passes.get(`${p.id}:${a.courseId}`) ?? null, now).state)).length;
                 const allDone = targets.length > 0 && done === targets.length;
                 const state = dueState(a.dueAt, allDone, now);
                 const targetUser = a.targetUserId ? names.get(a.targetUserId) : null;
@@ -151,6 +151,11 @@ export default async function AssignmentsPage() {
                           by {a.assignedBy ? (names.get(a.assignedBy)?.name ?? "someone") : "someone"} · {formatDate(a.createdAt)}
                         </span>
                       </div>
+                      {a.recurMonths && (
+                        <p className="mt-1 text-xs font-semibold text-muted">
+                          ↻ Repeats every {a.recurMonths % 12 === 0 ? `${a.recurMonths / 12 === 1 ? "year" : `${a.recurMonths / 12} years`}` : `${a.recurMonths} months`}
+                        </p>
+                      )}
                       {a.note && <p className="mt-1.5 text-sm text-muted">“{a.note}”</p>}
                     </div>
                     <div className="w-40">

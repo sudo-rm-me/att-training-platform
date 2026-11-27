@@ -24,6 +24,14 @@ export function defaultQuestion(type: QuestionType, prev?: QuestionData | null):
       return { ...base, type, items: Array.from({ length: 3 }, () => ({ id: shortId(), text: "" })) };
     case "matching":
       return { ...base, type, pairs: Array.from({ length: 3 }, () => ({ id: shortId(), left: "", right: "" })) };
+    case "acknowledge":
+      return {
+        ...base,
+        type,
+        prompt: prev?.prompt || "Before you finish",
+        statement: "I have read and understood this policy and agree to follow it.",
+        points: 0,
+      };
   }
 }
 
@@ -87,4 +95,5 @@ export const QUESTION_OPTIONS: { value: QuestionType; label: string; hint: strin
   { value: "truefalse", label: "True or false", hint: "Quick fact check" },
   { value: "ordering", label: "Put in order", hint: "Sequence the steps" },
   { value: "matching", label: "Match the pairs", hint: "Connect related items" },
+  { value: "acknowledge", label: "Acknowledgement", hint: "Policy sign-off, timestamped" },
 ];

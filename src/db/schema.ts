@@ -72,6 +72,8 @@ export const teams = pgTable(
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     icon: text("icon").notNull().default("👥"),
+    /** Microsoft Teams incoming-webhook / Workflows URL for weekly team summaries. */
+    webhookUrl: text("webhook_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("teams_name_unique").on(sql`lower(${t.name})`)],
@@ -168,6 +170,15 @@ export type QuestionData =
       prompt: string;
       pairs: { id: string; left: string; right: string }[];
       explanation?: string;
+      points?: number;
+    }
+  | {
+      /** Policy sign-off: the learner ticks a statement. Timestamped in attempt_answers. */
+      type: "acknowledge";
+      prompt: string;
+      statement: string;
+      explanation?: string;
+      /** Defaults to 0 so it doesn't affect the score. */
       points?: number;
     };
 
@@ -320,6 +331,8 @@ export const assignments = pgTable(
     /** Set when targetType = team */
     targetTeamId: uuid("target_team_id").references(() => teams.id, { onDelete: "cascade" }),
     dueAt: timestamp("due_at", { withTimezone: true }),
+    /** Recurring training: a pass is valid for this many months, then it must be retaken. */
+    recurMonths: integer("recur_months"),
     note: text("note"),
     assignedBy: uuid("assigned_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -355,3 +368,32 @@ export const auditLog = pgTable(
   (t) => [index("audit_created_idx").on(t.createdAt), index("audit_action_idx").on(t.action, t.createdAt)],
 );
 export type AuditEntry = typeof auditLog.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** "reminder" | "nudge" | "summary" */
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    link: text("link"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.createdAt)],
+);
+export type Notification = typeof notifications.$inferSelect;
+
+/** Idempotency keys for outbound reminders, so each one goes out once. */
+export const deliveryLog = pgTable("delivery_log", {
+  key: text("key").primaryKey(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+});

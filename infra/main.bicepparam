@@ -15,5 +15,7 @@ param initialAdminEmails = readEnvironmentVariable('INITIAL_ADMIN_EMAILS', '')
 
 param appTimezone = readEnvironmentVariable('APP_TIMEZONE', 'Europe/London')
 param minReplicas = int(readEnvironmentVariable('MIN_REPLICAS', '1'))
+param mailSender = readEnvironmentVariable('MAIL_SENDER', '')
+param escalateAfterDays = int(readEnvironmentVariable('ESCALATE_AFTER_DAYS', '14'))
 
 param postgresAdminPassword = readEnvironmentVariable('POSTGRES_ADMIN_PASSWORD')

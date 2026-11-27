@@ -49,6 +49,7 @@ export function AssignForm({
         targetTeamId: target === "team" ? str("targetTeamId") : undefined,
         dueDate: str("dueDate"),
         note: str("note"),
+        recurMonths: str("recurMonths") ? Number(str("recurMonths")) : undefined,
       });
       if (res.ok) {
         toast.success(res.message);
@@ -151,6 +152,17 @@ export function AssignForm({
           Due date <span className="font-normal text-muted">(optional)</span>
         </Label>
         <Input id="dueDate" name="dueDate" type="date" min={today} />
+      </div>
+      <div>
+        <Label htmlFor="recurMonths">Repeat</Label>
+        <Select id="recurMonths" name="recurMonths" defaultValue="">
+          <option value="">One-off</option>
+          <option value="6">Every 6 months</option>
+          <option value="12">Every year</option>
+          <option value="24">Every 2 years</option>
+          <option value="36">Every 3 years</option>
+        </Select>
+        <p className="mt-1 text-xs text-muted">Recurring training expires after the period, and people are reminded to retake it 30 days before.</p>
       </div>
       <div>
         <Label htmlFor="note">

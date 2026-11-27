@@ -11,7 +11,8 @@ export type NavIcon =
   | "studio"
   | "users"
   | "audit"
-  | "teams";
+  | "teams"
+  | "reminders";
 
 export type NavItem = { href: string; label: string; icon: NavIcon };
 export type NavSection = { title: string; items: NavItem[] };
@@ -56,6 +57,7 @@ export function buildNav(p: NavPerms): NavSection[] {
       items: [
         { href: "/admin/users", label: "People & roles", icon: "users" },
         { href: "/admin/teams", label: "Teams", icon: "teams" },
+        { href: "/admin/reminders", label: "Reminders", icon: "reminders" },
         { href: "/admin/audit", label: "Audit log", icon: "audit" },
       ],
     });

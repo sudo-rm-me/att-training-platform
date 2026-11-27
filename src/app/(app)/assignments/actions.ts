@@ -24,6 +24,8 @@ const input = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   note: z.string().trim().max(500).optional(),
+  /** Retake every N months (recurring compliance training). */
+  recurMonths: z.coerce.number().int().min(1).max(60).optional(),
 });
 export type AssignmentInput = z.input<typeof input>;
 
@@ -123,19 +125,19 @@ export async function createAssignmentAction(raw: AssignmentInput): Promise<Resu
 
   const who = await targetLabel(target);
   const auditEntry = {
-    summary: `${course.title} → ${who}${dueAt ? ` (due ${v.dueDate})` : ""}`,
+    summary: `${course.title} → ${who}${dueAt ? ` (due ${v.dueDate})` : ""}${v.recurMonths ? ` (every ${v.recurMonths} months)` : ""}`,
     targetType: "course",
     targetId: course.id,
-    meta: { ...target, dueAt: dueAt?.toISOString() ?? null },
+    meta: { ...target, dueAt: dueAt?.toISOString() ?? null, recurMonths: v.recurMonths ?? null },
   };
 
   if (existing) {
-    await db.update(assignments).set({ dueAt, note: v.note || null, assignedBy: me.id }).where(eq(assignments.id, existing.id));
+    await db.update(assignments).set({ dueAt, note: v.note || null, recurMonths: v.recurMonths ?? null, assignedBy: me.id }).where(eq(assignments.id, existing.id));
     await audit(me, { action: "assignment.update", ...auditEntry });
     refresh();
     return { ok: true, message: "Assignment updated" };
   }
-  await db.insert(assignments).values({ courseId: v.courseId, ...target, dueAt, note: v.note || null, assignedBy: me.id });
+  await db.insert(assignments).values({ courseId: v.courseId, ...target, dueAt, note: v.note || null, recurMonths: v.recurMonths ?? null, assignedBy: me.id });
   await audit(me, { action: "assignment.create", ...auditEntry });
   refresh();
   return { ok: true, message: `“${course.title}” assigned` };

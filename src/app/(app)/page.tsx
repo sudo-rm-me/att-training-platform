@@ -1,7 +1,9 @@
 import { Coins, Flame, Sparkles, Trophy } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { levelFromXp } from "@/lib/levels";
-import { Card, Progress, StatTile } from "@/components/ui";
+import { Card, LinkButton, Progress, StatTile } from "@/components/ui";
+import { listCatalog } from "@/lib/courses";
+import { CourseCard } from "@/components/course-card";
 import { UserAvatar } from "@/components/user-avatar";
 
 export const metadata = { title: "Dashboard" };
@@ -16,6 +18,12 @@ export default async function DashboardPage(props: PageProps<"/">) {
   const sp = await props.searchParams;
   const lvl = levelFromXp(user.xp);
   const firstName = user.name.split(" ")[0];
+  const catalog = await listCatalog(user.id);
+  const upNext = [
+    ...catalog.filter((c) => c.progress.status === "in_progress"),
+    ...catalog.filter((c) => c.progress.status === "not_started" || c.progress.status === "failed"),
+  ].slice(0, 3);
+  const completed = catalog.filter((c) => c.progress.status === "completed").length;
 
   return (
     <div className="space-y-8">
@@ -53,8 +61,28 @@ export default async function DashboardPage(props: PageProps<"/">) {
         <StatTile label="Total XP" value={user.xp.toLocaleString()} icon={<Sparkles className="h-5 w-5" />} />
         <StatTile label="Coins" value={user.coins.toLocaleString()} icon={<Coins className="h-5 w-5 text-accent" />} />
         <StatTile label="Level" value={lvl.level} icon={<Trophy className="h-5 w-5" />} hint={lvl.title} />
-        <StatTile label="Streak" value="0 days" icon={<Flame className="h-5 w-5 text-[var(--brand-3)]" />} />
+        <StatTile label="Courses done" value={`${completed}/${catalog.length}`} icon={<Flame className="h-5 w-5 text-[var(--brand-3)]" />} />
       </div>
+
+      <section>
+        <div className="mb-4 flex items-end justify-between">
+          <h2 className="font-display text-xl font-bold">Up next</h2>
+          <LinkButton href="/courses" variant="ghost" size="sm">
+            All courses →
+          </LinkButton>
+        </div>
+        {upNext.length === 0 ? (
+          <Card className="p-8 text-center text-muted">
+            {catalog.length === 0 ? "No courses published yet." : "You're all caught up. Nice! 🎉"}
+          </Card>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {upNext.map((c) => (
+              <CourseCard key={c.id} course={c} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

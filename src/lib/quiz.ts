@@ -3,7 +3,7 @@ import type { AnswerValue, QuestionData } from "@/db/schema";
 export const DEFAULT_POINTS = 10;
 
 export function questionPoints(q: QuestionData) {
-  return q.points ?? DEFAULT_POINTS;
+  return q.points ?? (q.type === "acknowledge" ? 0 : DEFAULT_POINTS);
 }
 
 /** Deterministic PRNG so shuffles are stable for an attempt (resume/refresh). */
@@ -46,7 +46,8 @@ export type ClientQuestion =
       lefts: { id: string; text: string }[];
       rights: { id: string; text: string }[];
       points: number;
-    };
+    }
+  | { type: "acknowledge"; prompt: string; statement: string; points: number };
 
 export function toClientQuestion(q: QuestionData, seed: string): ClientQuestion {
   const points = questionPoints(q);
@@ -69,6 +70,8 @@ export function toClientQuestion(q: QuestionData, seed: string): ClientQuestion 
         ),
         points,
       };
+    case "acknowledge":
+      return { type: "acknowledge", prompt: q.prompt, statement: q.statement, points };
   }
 }
 
@@ -95,6 +98,8 @@ export function grade(q: QuestionData, answer: AnswerValue): boolean {
       const map = answer as Record<string, string>;
       return q.pairs.every((p) => map[p.id] === p.id);
     }
+    case "acknowledge":
+      return answer === true;
   }
 }
 
@@ -110,6 +115,8 @@ export function describeCorrect(q: QuestionData): string[] {
       return q.items.map((i, n) => `${n + 1}. ${i.text}`);
     case "matching":
       return q.pairs.map((p) => `${p.left} → ${p.right}`);
+    case "acknowledge":
+      return [`Acknowledged: “${q.statement}”`];
   }
 }
 
@@ -131,6 +138,8 @@ export function describeAnswer(q: QuestionData, answer: AnswerValue | undefined)
       const map = (answer ?? {}) as Record<string, string>;
       return q.pairs.map((p) => `${p.left} → ${q.pairs.find((x) => x.id === map[p.id])?.right ?? "?"}`);
     }
+    case "acknowledge":
+      return [answer === true ? `Acknowledged: “${q.statement}”` : "(not acknowledged)"];
   }
 }
 
@@ -140,4 +149,5 @@ export const QUESTION_TYPE_LABEL: Record<QuestionData["type"], string> = {
   truefalse: "True or false",
   ordering: "Put in order",
   matching: "Match the pairs",
+  acknowledge: "Acknowledgement",
 };

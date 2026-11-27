@@ -8,6 +8,7 @@ A training and training-tracking platform: slide-based courses with quizzes, XP,
 - **Gamification**: XP and levels, coins, 15 badges, daily streaks, individual and team leaderboards, a layered SVG character creator and an item shop.
 - **Teams**: admins create teams (or generate one per Entra department), add people and choose team leads. New starters join the team named after their department.
 - **Assignments**: team leads assign courses to their team or its members; admins can assign to any team, department or everyone. Due dates drive in-app reminders (a topbar bell, a dashboard banner and due chips).
+- **Compliance**: recurring training (every 6, 12, 24 or 36 months) expires and asks people to renew; acknowledgement slides record a timestamped policy sign-off; a daily job sends email (Microsoft Graph) and Teams channel reminders, weekly manager digests with escalation, and managers can nudge people from the Team page.
 - **Team progress**: team leads see completion, overdue training and XP for their teams, and can download members' certificates.
 - **Certificates**: every passed course earns a PDF certificate (`/certificates`).
 
@@ -67,3 +68,7 @@ Infrastructure as code lives in [`infra/`](infra/main.bicep): Container Apps, AC
 | `UPLOAD_DIR` | Local upload folder when Blob Storage isn't configured |
 | `APP_TIMEZONE` | IANA timezone for streaks and due dates (default `Europe/London`) |
 | `NEXT_PUBLIC_APP_NAME` | Display name (build time) |
+| `APP_URL` | Public URL used in email and Teams links |
+| `CRON_SECRET` | Enables `POST /api/cron/reminders` (Bearer token) |
+| `MAIL_SENDER` | Mailbox for reminder emails via Microsoft Graph (`Mail.Send`) |
+| `ESCALATE_AFTER_DAYS` | Days overdue before managers see “Escalated” (default 14) |

@@ -8,6 +8,7 @@ import { getDb } from "@/db";
 import { teamLeads, teams, users } from "@/db/schema";
 import { requirePermission } from "@/lib/session";
 import { audit } from "@/lib/audit";
+import { validWebhookUrl } from "@/lib/teams-webhook";
 
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
@@ -15,6 +16,13 @@ const teamInput = z.object({
   name: z.string().trim().min(1, "Give the team a name.").max(80),
   icon: z.string().trim().min(1).max(8).default("👥"),
   description: z.string().trim().max(300).default(""),
+  /** Teams channel incoming-webhook URL ("" clears it). Only on update. */
+  webhookUrl: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .refine((u) => !u || validWebhookUrl(u), "Use the HTTPS webhook URL from a Teams Workflow or connector."),
 });
 
 function refresh(teamId?: string) {
@@ -41,20 +49,26 @@ export async function createTeamAction(raw: { name: string; icon?: string; descr
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   if (await nameTaken(parsed.data.name)) return { ok: false, error: "A team with that name already exists." };
   const db = await getDb();
-  const [t] = await db.insert(teams).values(parsed.data).returning();
+  const { name, icon, description } = parsed.data;
+  const [t] = await db.insert(teams).values({ name, icon, description }).returning();
   await audit(me, { action: "team.create", summary: t.name, targetType: "team", targetId: t.id });
   refresh();
   return { ok: true, message: `Team “${t.name}” created`, id: t.id };
 }
 
-export async function updateTeamAction(teamId: string, raw: { name: string; icon?: string; description?: string }): Promise<Result> {
+export async function updateTeamAction(teamId: string, raw: { name: string; icon?: string; description?: string; webhookUrl?: string }): Promise<Result> {
   const me = await requirePermission("admin");
   const id = z.uuid().parse(teamId);
   const parsed = teamInput.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   if (await nameTaken(parsed.data.name, id)) return { ok: false, error: "A team with that name already exists." };
   const db = await getDb();
-  const [t] = await db.update(teams).set(parsed.data).where(eq(teams.id, id)).returning();
+  const { webhookUrl, ...rest } = parsed.data;
+  const [t] = await db
+    .update(teams)
+    .set({ ...rest, ...(webhookUrl !== undefined ? { webhookUrl: webhookUrl || null } : {}) })
+    .where(eq(teams.id, id))
+    .returning();
   if (!t) return { ok: false, error: "Team not found." };
   await audit(me, { action: "team.update", summary: t.name, targetType: "team", targetId: t.id });
   refresh(id);

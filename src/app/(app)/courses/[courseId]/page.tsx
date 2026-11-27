@@ -11,7 +11,7 @@ import { getTheme } from "@/lib/themes";
 import { Badge, Button, Card } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { DueChip } from "@/components/due-chip";
-import { dueText, getMyAssignments } from "@/lib/assignments";
+import { getMyAssignments } from "@/lib/assignments";
 
 export async function generateMetadata(props: PageProps<"/courses/[courseId]">) {
   const { courseId } = await props.params;
@@ -84,7 +84,7 @@ export default async function CoursePage(props: PageProps<"/courses/[courseId]">
               {assignment && (
                 <DueChip
                   state={assignment.state}
-                  text={assignment.state === "done" ? "Assigned · done" : `Assigned · ${dueText(assignment.dueAt)}`}
+                  text={assignment.state === "done" && !assignment.validUntil ? "Assigned · done" : `Assigned · ${assignment.text}`}
                   className={assignment.state === "overdue" ? "bg-rose-500 text-white" : "bg-white/90 text-[#1b1440]"}
                 />
               )}

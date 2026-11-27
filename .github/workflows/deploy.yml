@@ -34,6 +34,8 @@ jobs:
       INITIAL_ADMIN_EMAILS: ${{ vars.INITIAL_ADMIN_EMAILS }}
       APP_TIMEZONE: ${{ vars.APP_TIMEZONE || 'Europe/London' }}
       MIN_REPLICAS: ${{ vars.MIN_REPLICAS || '1' }}
+      MAIL_SENDER: ${{ vars.MAIL_SENDER || '' }}
+      ESCALATE_AFTER_DAYS: ${{ vars.ESCALATE_AFTER_DAYS || '14' }}
     steps:
       - uses: actions/checkout@v4
 

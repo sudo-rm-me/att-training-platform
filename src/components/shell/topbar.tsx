@@ -6,7 +6,7 @@ import { levelFromXp } from "@/lib/levels";
 import { UserAvatar } from "@/components/user-avatar";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./sidebar";
-import { Reminders, type Reminder } from "./reminders";
+import { Reminders, type Reminder, type Update } from "./reminders";
 import type { NavSection } from "./nav";
 
 export function Topbar({
@@ -14,11 +14,13 @@ export function Topbar({
   sections,
   appName,
   reminders,
+  updates,
 }: {
   user: User;
   sections: NavSection[];
   appName: string;
   reminders: Reminder[];
+  updates: Update[];
 }) {
   const lvl = levelFromXp(user.xp);
   return (
@@ -48,7 +50,7 @@ export function Topbar({
         {user.coins}
       </div>
 
-      <Reminders items={reminders} />
+      <Reminders items={reminders} updates={updates} />
 
       <ThemeToggle />
 

@@ -37,6 +37,13 @@ export const questionSchema: z.ZodType<QuestionData> = z.discriminatedUnion("typ
     explanation: text(2000).optional(),
     points: z.number().int().min(0).max(1000).optional(),
   }),
+  z.object({
+    type: z.literal("acknowledge"),
+    prompt: text(1000),
+    statement: text(1000),
+    explanation: text(2000).optional(),
+    points: z.number().int().min(0).max(1000).optional(),
+  }),
 ]);
 
 export const LAYOUTS = ["title", "content", "image-left", "image-right", "image-full", "video", "quote", "section"] as const;
@@ -104,6 +111,9 @@ export function publishProblems(slides: EditorSlide[]): { index: number; message
       case "matching":
         if (q.pairs.filter((p) => p.left.trim() && p.right.trim()).length < 2)
           out.push({ index, message: "Add at least two complete pairs." });
+        break;
+      case "acknowledge":
+        if (!q.statement.trim()) out.push({ index, message: "Write the statement learners agree to." });
         break;
     }
   });

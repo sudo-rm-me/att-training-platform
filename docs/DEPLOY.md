@@ -90,6 +90,8 @@ Sign in with an email from `INITIAL_ADMIN_EMAILS` and you're an admin. From then
 | `APP_NAME`             | Display name baked into the image (default `Academy`)                     |
 | `APP_TIMEZONE`         | Optional, default `Europe/London`                                         |
 | `MIN_REPLICAS`         | Optional, default `1`. `0` scales to zero but adds cold starts.           |
+| `MAIL_SENDER`          | Optional. Mailbox that sends reminder emails (see below)                  |
+| `ESCALATE_AFTER_DAYS`  | Optional, default `14`. Days overdue before managers see “Escalated”.     |
 
 | Secrets                   | Value                                                                  |
 | ------------------------- | ---------------------------------------------------------------------- |
@@ -119,6 +121,24 @@ ACR=$(az deployment group show -g att-prod -n infra --query properties.outputs.a
 az acr build -r "$ACR" -t att:v1 .
 CONTAINER_IMAGE="$ACR.azurecr.io/att:v1" az deployment group create -g att-prod -n infra --parameters infra/main.bicepparam
 ```
+
+## Reminders (email and Teams)
+
+The deployment adds a Container Apps **job** (`<prefix>-app-reminders`) that runs every day at 07:00 UTC and calls `POST /api/cron/reminders` with a shared secret (`cron-secret` in Key Vault, derived from `AUTH_SECRET` unless you pass `cronSecret`). It sends:
+
+- learners: a reminder 7 days and 1 day before a due date, weekly while overdue, and 30 and 7 days before a recurring pass expires;
+- managers and team leads: a weekly digest of overdue training, flagging people overdue for more than `ESCALATE_AFTER_DAYS`;
+- teams with a channel webhook: a weekly progress card.
+
+Everything appears in the in-app bell. **Email** is optional:
+
+1. Pick a sending mailbox (a shared mailbox such as `academy@company.com` is ideal) and set the `MAIL_SENDER` variable.
+2. In the sign-in app registration, add **Microsoft Graph → Application permission → Mail.Send** and grant admin consent.
+3. Recommended: restrict the app to that one mailbox with an [Exchange application access policy](https://learn.microsoft.com/graph/auth-limit-mailbox-access) or RBAC for Applications.
+
+**Teams**: in the channel, add the Workflow *“Post to a channel when a webhook request is received”*, copy its URL and paste it on the team's page under *Admin → Teams*.
+
+Run the job by hand with `az containerapp job start -g att-prod -n att-app-reminders`, or press *Run reminders now* on *Admin → Reminders*. Every message has an idempotency key, so extra runs never send duplicates.
 
 ## Operations
 

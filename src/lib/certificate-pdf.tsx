@@ -68,6 +68,8 @@ export type CertificateData = {
   learnerName: string;
   courseTitle: string;
   score: number;
+  /** Signed policy acknowledgements in the certifying attempt. */
+  acknowledgements?: number;
   issuedOn: string;
   number: string;
 };
@@ -113,6 +115,11 @@ function CertificateDoc(d: CertificateData) {
           <Text style={s.meta}>
             with a score of {d.score}% · {d.issuedOn}
           </Text>
+          {!!d.acknowledgements && (
+            <Text style={s.meta}>
+              including {d.acknowledgements} signed policy {d.acknowledgements === 1 ? "acknowledgement" : "acknowledgements"}
+            </Text>
+          )}
 
           <View style={s.footer}>
             <View style={s.footCol}>

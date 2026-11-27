@@ -100,6 +100,22 @@ export function QuestionEditor({ q, onChange }: { q: QuestionData; onChange: (q:
         </div>
       )}
 
+      {q.type === "acknowledge" && (
+        <div>
+          <Label htmlFor="ack-statement">Statement learners agree to</Label>
+          <Textarea
+            id="ack-statement"
+            rows={3}
+            value={q.statement}
+            placeholder="I have read and understood the policy and agree to follow it."
+            onChange={(e) => onChange({ ...q, statement: e.target.value })}
+          />
+          <p className="mt-1.5 text-xs text-muted">
+            Learners must tick this to continue. The time they did is recorded. Worth 0 points unless you change it.
+          </p>
+        </div>
+      )}
+
       {q.type === "truefalse" && (
         <div>
           <Label>Correct answer</Label>

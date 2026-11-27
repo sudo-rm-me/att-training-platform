@@ -56,3 +56,12 @@ test("team changes are audited and the team shows on the leaderboard", async () 
   await admin.goto("/leaderboard?view=teams&period=all");
   await expect(admin.locator("main")).toContainText(TEAM);
 });
+
+test("admins can run reminders and see the set-up checklist", async () => {
+  await expectAllowed(admin, "/admin/reminders", "Reminders");
+  await expect(admin.locator("main")).toContainText("Daily schedule");
+  await admin.getByRole("button", { name: "Run reminders now" }).click();
+  await expect(admin.getByText(/Sent \d+ reminders|Nothing new to send/)).toBeVisible();
+  await admin.goto("/admin/audit");
+  await expect(admin.locator("tbody")).toContainText("manager digests");
+});

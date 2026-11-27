@@ -13,7 +13,7 @@ import { listCatalog } from "@/lib/courses";
 import { CourseCard } from "@/components/course-card";
 import { UserAvatar } from "@/components/user-avatar";
 import { DueChip } from "@/components/due-chip";
-import { dueText, getMyAssignments } from "@/lib/assignments";
+import { getMyAssignments } from "@/lib/assignments";
 
 export const metadata = { title: "Dashboard" };
 
@@ -115,7 +115,7 @@ export default async function DashboardPage(props: PageProps<"/">) {
               <CourseCard
                 key={a.course.id}
                 course={a.course}
-                dueLabel={<DueChip state={a.state} text={dueText(a.dueAt)} />}
+                dueLabel={<DueChip state={a.state} text={a.text} />}
               />
             ))}
           </div>

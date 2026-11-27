@@ -12,6 +12,8 @@ export function correctAnswer(q: QuestionData): AnswerValue {
       return q.items.map((i) => i.id);
     case "matching":
       return Object.fromEntries(q.pairs.map((p) => [p.id, p.id]));
+    case "acknowledge":
+      return true;
   }
 }
 
@@ -32,5 +34,7 @@ export function wrongAnswer(q: QuestionData): AnswerValue {
       const ids = q.pairs.map((p) => p.id);
       return Object.fromEntries(ids.map((id, i) => [id, ids[(i + 1) % ids.length]]));
     }
+    case "acknowledge":
+      return false;
   }
 }

@@ -43,6 +43,13 @@
       "when": 1795782014742,
       "tag": "0005_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795782537112,
+      "tag": "0006_compliance",
+      "breakpoints": true
     }
   ]
 }

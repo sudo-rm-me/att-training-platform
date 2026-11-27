@@ -227,6 +227,12 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
                           </div>
                         )}
                       </div>
+                      {q.type === "acknowledge" && a?.correct && (
+                        <p className="mt-3 text-xs font-semibold text-muted">
+                          ✍️ Signed by {user.name} on{" "}
+                          {a.answeredAt.toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: process.env.APP_TIMEZONE || "Europe/London" })}
+                        </p>
+                      )}
                       {q.explanation && <p className="mt-3 rounded-xl bg-fg/5 px-3 py-2 text-sm text-muted">{q.explanation}</p>}
                     </div>
                   </div>

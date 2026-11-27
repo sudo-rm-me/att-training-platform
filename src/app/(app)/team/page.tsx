@@ -3,12 +3,14 @@ import { AlarmClock, Award, ChevronDown, ClipboardCheck, Sparkles, Users } from 
 import { getDb } from "@/db";
 import { courses } from "@/db/schema";
 import { requirePermission } from "@/lib/session";
-import { dueState, dueText, listDepartments, managedPeople, mergeForUser, passedPairs, publishedAssignments, type DueState } from "@/lib/assignments";
+import { isCompliant, latestPasses, listDepartments, managedPeople, mergeForUser, publishedAssignments, requirementStatus, statusText, type DueState } from "@/lib/assignments";
 import { listTeams, scopeFor, teamsByIds } from "@/lib/teams";
 import { levelFromXp } from "@/lib/levels";
 import { liveStreak } from "@/lib/gamification";
 import { Card, EmptyState, LinkButton, PageHeader, Progress, StatTile } from "@/components/ui";
 import { DueChip } from "@/components/due-chip";
+import { escalateAfterDays } from "@/lib/reminders";
+import { NudgeOverdueButton, NudgeUserButton } from "./nudge-buttons";
 import { UserAvatar } from "@/components/user-avatar";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -32,7 +34,7 @@ export default async function TeamPage(props: PageProps<"/team">) {
     managedPeople(scope, { teamId: selectedTeam?.id ?? null, department: deptParam }),
     publishedAssignments(),
   ]);
-  const passed = await passedPairs(people.map((p) => p.id));
+  const passes = await latestPasses(people.map((p) => p.id));
   const courseIds = [...new Set(all.map((a) => a.courseId))];
   const db = await getDb();
   const courseInfo = new Map(
@@ -48,24 +50,30 @@ export default async function TeamPage(props: PageProps<"/team">) {
   );
   const now = new Date();
 
-  type Item = { courseId: string; title: string; icon: string; state: DueState; dueAt: Date | null };
+  type Item = { courseId: string; title: string; icon: string; state: DueState; dueAt: Date | null; text: string; passed: boolean; daysOverdue: number };
   const rows = people.map((p) => {
     const items: Item[] = [...mergeForUser(all, p)].map(([courseId, m]) => ({
       courseId,
       title: courseInfo.get(courseId)?.title ?? "Course",
       icon: courseInfo.get(courseId)?.icon ?? "📘",
-      dueAt: m.dueAt,
-      state: dueState(m.dueAt, passed.has(`${p.id}:${courseId}`), now),
+      ...(() => {
+        const last = passes.get(`${p.id}:${courseId}`) ?? null;
+        const st = requirementStatus(m, last, now);
+        const daysOverdue = st.state === "overdue" && st.dueAt ? Math.floor((now.getTime() - st.dueAt.getTime()) / 86_400_000) : 0;
+        return { dueAt: st.dueAt, state: st.state, text: statusText(st, now), passed: !!last, daysOverdue };
+      })(),
     }));
-    const done = items.filter((i) => i.state === "done").length;
+    const done = items.filter((i) => isCompliant(i.state)).length;
     const overdue = items.filter((i) => i.state === "overdue").length;
-    return { p, items, done, overdue, lvl: levelFromXp(p.xp), streak: liveStreak(p) };
+    const escalated = items.some((i) => i.daysOverdue > escalateAfterDays());
+    return { p, items, done, overdue, escalated, lvl: levelFromXp(p.xp), streak: liveStreak(p) };
   });
   rows.sort((a, b) => b.overdue - a.overdue || a.done / (a.items.length || 1) - b.done / (b.items.length || 1) || a.p.name.localeCompare(b.p.name));
 
   const totalAssigned = rows.reduce((n, r) => n + r.items.length, 0);
   const totalDone = rows.reduce((n, r) => n + r.done, 0);
   const totalOverdue = rows.reduce((n, r) => n + r.overdue, 0);
+  const totalEscalated = rows.filter((r) => r.escalated).length;
   const avgXp = people.length ? Math.round(people.reduce((n, p) => n + p.xp, 0) / people.length) : 0;
 
   // Per-course rollup
@@ -74,7 +82,7 @@ export default async function TeamPage(props: PageProps<"/team">) {
     for (const i of r.items) {
       const c = byCourse.get(i.courseId) ?? { title: i.title, icon: i.icon, assigned: 0, done: 0, overdue: 0 };
       c.assigned++;
-      if (i.state === "done") c.done++;
+      if (isCompliant(i.state)) c.done++;
       if (i.state === "overdue") c.overdue++;
       byCourse.set(i.courseId, c);
     }
@@ -132,6 +140,7 @@ export default async function TeamPage(props: PageProps<"/team">) {
                 <button className="text-sm font-semibold text-brand">Go</button>
               </form>
             )}
+            {totalOverdue > 0 && <NudgeOverdueButton teamId={selectedTeam?.id ?? null} department={deptParam} count={totalOverdue} />}
             <LinkButton href="/assignments">
               <ClipboardCheck className="h-4 w-4" /> Assign training
             </LinkButton>
@@ -163,7 +172,7 @@ export default async function TeamPage(props: PageProps<"/team">) {
               label="Overdue"
               value={totalOverdue}
               icon={<AlarmClock className={cn("h-5 w-5", totalOverdue && "text-danger")} />}
-              hint={totalOverdue ? "Needs a nudge" : "Nothing overdue 🎉"}
+              hint={totalOverdue ? (totalEscalated ? `${totalEscalated} escalated (over ${escalateAfterDays()} days)` : "Needs a nudge") : "Nothing overdue 🎉"}
             />
             <StatTile label="Average XP" value={avgXp.toLocaleString()} icon={<Sparkles className="h-5 w-5" />} />
           </div>
@@ -194,7 +203,7 @@ export default async function TeamPage(props: PageProps<"/team">) {
           <section>
             <h2 className="mb-4 font-display text-xl font-bold">People</h2>
             <Card className="overflow-hidden">
-              {rows.map(({ p, items, done, overdue, lvl, streak }) => (
+              {rows.map(({ p, items, done, overdue, escalated, lvl, streak }) => (
                 <details key={p.id} className="group border-t border-border/60 first:border-t-0">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-4 px-5 py-3.5 hover:bg-fg/[0.03] [&::-webkit-details-marker]:hidden">
                     <UserAvatar name={p.name} avatar={p.avatar} className="h-10 w-10" />
@@ -205,6 +214,11 @@ export default async function TeamPage(props: PageProps<"/team">) {
                         {streak > 1 && ` · 🔥 ${streak}`}
                       </div>
                     </div>
+                    {escalated && (
+                      <span className="rounded-full bg-danger px-2.5 py-0.5 text-xs font-bold text-white" title={`Overdue for more than ${escalateAfterDays()} days`}>
+                        Escalated
+                      </span>
+                    )}
                     {overdue > 0 && <DueChip state="overdue" text={`${overdue} overdue`} />}
                     <div className="w-36">
                       <div className="flex justify-between text-xs font-semibold">
@@ -223,6 +237,11 @@ export default async function TeamPage(props: PageProps<"/team">) {
                     <ChevronDown className="h-4 w-4 text-muted transition group-open:rotate-180" />
                   </summary>
                   <div className="bg-fg/[0.02] px-5 pb-4 pt-1 md:pl-[4.75rem]">
+                    {items.some((i) => i.state !== "done") && (
+                      <div className="flex justify-end pt-2">
+                        <NudgeUserButton userId={p.id} name={p.name} />
+                      </div>
+                    )}
                     {items.length === 0 ? (
                       <p className="py-2 text-sm text-muted">No training assigned.</p>
                     ) : (
@@ -231,8 +250,8 @@ export default async function TeamPage(props: PageProps<"/team">) {
                           <li key={i.courseId} className="flex flex-wrap items-center gap-3 py-2 text-sm">
                             <span className="text-lg">{i.icon}</span>
                             <span className="min-w-0 flex-1 truncate font-medium">{i.title}</span>
-                            <DueChip state={i.state} text={i.state === "done" ? "Completed" : dueText(i.dueAt, now)} />
-                            {i.state === "done" && (
+                            <DueChip state={i.state} text={i.text} />
+                            {i.passed && (
                               <a
                                 href={`/api/certificates/${i.courseId}?user=${p.id}`}
                                 target="_blank"

@@ -68,6 +68,7 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
       : {},
   );
   const [activeLeft, setActiveLeft] = React.useState<string | null>(null);
+  const [ack, setAck] = React.useState(() => feedback?.answer === true);
 
   const surface = dark ? "bg-white/10 border-white/20 hover:bg-white/18" : "bg-black/[0.04] border-black/10 hover:bg-black/[0.07]";
   const selected = dark ? "bg-white text-[#1b1440] border-white" : "bg-[#1e1b4b] text-white border-[#1e1b4b]";
@@ -83,6 +84,8 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
         return true;
       case "matching":
         return question.lefts.every((l) => pairs[l.id]);
+      case "acknowledge":
+        return ack;
     }
   })();
 
@@ -104,6 +107,9 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
           break;
         case "matching":
           answer = pairs;
+          break;
+        case "acknowledge":
+          answer = true;
           break;
       }
       await onSubmit(answer);
@@ -166,6 +172,35 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
               );
             })}
           </div>
+        )}
+
+        {question.type === "acknowledge" && (
+          <label
+            className={cn(
+              "flex cursor-pointer items-start gap-[0.8em] rounded-[1em] border-2 p-[1em] text-[1.15em] font-semibold transition-colors",
+              ack ? selected : surface,
+              feedback && "!border-emerald-400 ring-4 ring-emerald-400/40",
+              locked && "cursor-default",
+            )}
+          >
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={ack}
+              disabled={locked}
+              onChange={(e) => setAck(e.target.checked)}
+            />
+            <span
+              aria-hidden
+              className={cn(
+                "mt-[0.1em] grid h-[1.6em] w-[1.6em] shrink-0 place-items-center rounded-[0.4em] border-2 peer-focus-visible:ring-4 peer-focus-visible:ring-current/30",
+                ack ? (dark ? "border-[#1b1440] bg-[#1b1440] text-white" : "border-white bg-white text-[#1e1b4b]") : "border-current/40",
+              )}
+            >
+              {ack && <Check className="h-[1em] w-[1em]" />}
+            </span>
+            <span className="min-w-0 flex-1">{question.statement}</span>
+          </label>
         )}
 
         {question.type === "truefalse" && (

@@ -4,7 +4,7 @@ import { users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
 import { canManageUser } from "@/lib/assignments";
 import { scopeFor } from "@/lib/teams";
-import { certificateNumber, certificatesFor } from "@/lib/certificates";
+import { acknowledgementsFor, certificateNumber, certificatesFor } from "@/lib/certificates";
 import { renderCertificate } from "@/lib/certificate-pdf";
 import { TZ } from "@/lib/gamification";
 import { APP_NAME } from "@/lib/brand";
@@ -31,7 +31,9 @@ export async function GET(req: Request, ctx: RouteContext<"/api/certificates/[co
   const [cert] = await certificatesFor(learner.id, courseId);
   if (!cert) return new Response("No certificate: this course hasn't been passed yet.", { status: 404 });
 
+  const acks = await acknowledgementsFor(cert.attemptId);
   const pdf = await renderCertificate({
+    acknowledgements: acks.length,
     appName: APP_NAME,
     learnerName: learner.name,
     courseTitle: cert.courseTitle,

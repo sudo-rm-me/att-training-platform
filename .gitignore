@@ -49,6 +49,7 @@ next-env.d.ts
 
 # test output
 /.next-e2e
+/.next-*/
 /test-results
 /playwright-report
 

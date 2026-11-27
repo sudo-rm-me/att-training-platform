@@ -19,6 +19,18 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "50mb",
     },
   },
+  async headers() {
+    return [
+      {
+        // The service worker must always be re-checked so updates roll out.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        ],
+      },
+    ];
+  },
   turbopack: {
     rules: {
       "*.css": {

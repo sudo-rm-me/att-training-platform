@@ -8,8 +8,12 @@ import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./sidebar";
 import { Reminders, type Reminder, type Update } from "./reminders";
 import type { NavSection } from "./nav";
+import { GlobalSearch } from "./search";
+import { InstallAppButton } from "@/components/pwa";
+import { getT } from "@/i18n/server";
+import { LanguagePicker } from "./language-picker";
 
-export function Topbar({
+export async function Topbar({
   user,
   sections,
   appName,
@@ -23,9 +27,11 @@ export function Topbar({
   updates: Update[];
 }) {
   const lvl = levelFromXp(user.xp);
+  const t = await getT();
   return (
     <header className="sticky top-0 z-30 flex items-center gap-3 px-4 py-4 md:px-8">
       <MobileNav sections={sections} appName={appName} />
+      <GlobalSearch sections={sections} />
       <div className="flex-1" />
 
       <div className="glass hidden items-center gap-3 rounded-2xl py-1.5 pl-1.5 pr-4 sm:flex" title={`${user.xp} XP total`}>
@@ -70,11 +76,13 @@ export function Topbar({
           </div>
           <div className="my-1 h-px bg-border" />
           <Link href="/" className="block rounded-xl px-3 py-2 text-sm hover:bg-fg/5">
-            Dashboard
+            {t("nav.dashboard")}
           </Link>
           <Link href="/certificates" className="block rounded-xl px-3 py-2 text-sm hover:bg-fg/5">
-            My certificates
+            {t("menu.certificates")}
           </Link>
+          <InstallAppButton />
+          <LanguagePicker />
           <form
             action={async () => {
               "use server";
@@ -82,7 +90,7 @@ export function Topbar({
             }}
           >
             <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-danger hover:bg-danger/10">
-              <LogOut className="h-4 w-4" /> Sign out
+              <LogOut className="h-4 w-4" /> {t("menu.signOut")}
             </button>
           </form>
         </div>

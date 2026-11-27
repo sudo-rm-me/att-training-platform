@@ -14,55 +14,59 @@ export type NavIcon =
   | "teams"
   | "reminders"
   | "kudos"
-  | "events";
+  | "events"
+  | "reports";
 
 export type NavItem = { href: string; label: string; icon: NavIcon };
 export type NavSection = { title: string; items: NavItem[] };
 
+import type { Translate } from "@/i18n/messages";
+
 export type NavPerms = { author: boolean; manage: boolean; admin: boolean };
 
-export function buildNav(p: NavPerms): NavSection[] {
+export function buildNav(p: NavPerms, t: Translate): NavSection[] {
   const sections: NavSection[] = [
     {
-      title: "Learn",
+      title: t("nav.learn"),
       items: [
-        { href: "/", label: "Dashboard", icon: "home" },
-        { href: "/courses", label: "Courses", icon: "courses" },
-        { href: "/leaderboard", label: "Leaderboard", icon: "leaderboard" },
-        { href: "/badges", label: "Badges", icon: "badges" },
-        { href: "/kudos", label: "Kudos", icon: "kudos" },
+        { href: "/", label: t("nav.dashboard"), icon: "home" },
+        { href: "/courses", label: t("nav.courses"), icon: "courses" },
+        { href: "/leaderboard", label: t("nav.leaderboard"), icon: "leaderboard" },
+        { href: "/badges", label: t("nav.badges"), icon: "badges" },
+        { href: "/kudos", label: t("nav.kudos"), icon: "kudos" },
       ],
     },
     {
-      title: "You",
+      title: t("nav.you"),
       items: [
-        { href: "/avatar", label: "Avatar", icon: "avatar" },
-        { href: "/shop", label: "Shop", icon: "shop" },
-        { href: "/certificates", label: "Certificates", icon: "certificates" },
+        { href: "/avatar", label: t("nav.avatar"), icon: "avatar" },
+        { href: "/shop", label: t("nav.shop"), icon: "shop" },
+        { href: "/certificates", label: t("nav.certificates"), icon: "certificates" },
       ],
     },
   ];
   if (p.manage) {
     sections.push({
-      title: "Manage",
+      title: t("nav.manage"),
       items: [
-        { href: "/team", label: "Team progress", icon: "team" },
-        { href: "/assignments", label: "Assignments", icon: "assignments" },
+        { href: "/team", label: t("nav.team"), icon: "team" },
+        { href: "/assignments", label: t("nav.assignments"), icon: "assignments" },
       ],
     });
   }
   if (p.author) {
-    sections.push({ title: "Create", items: [{ href: "/studio", label: "Course studio", icon: "studio" }] });
+    sections.push({ title: t("nav.create"), items: [{ href: "/studio", label: t("nav.studio"), icon: "studio" }] });
   }
   if (p.admin) {
     sections.push({
-      title: "Admin",
+      title: t("nav.admin"),
       items: [
-        { href: "/admin/users", label: "People & roles", icon: "users" },
-        { href: "/admin/teams", label: "Teams", icon: "teams" },
-        { href: "/admin/reminders", label: "Reminders", icon: "reminders" },
-        { href: "/admin/events", label: "Events", icon: "events" },
-        { href: "/admin/audit", label: "Audit log", icon: "audit" },
+        { href: "/admin/reports", label: t("nav.reports"), icon: "reports" },
+        { href: "/admin/users", label: t("nav.users"), icon: "users" },
+        { href: "/admin/teams", label: t("nav.teams"), icon: "teams" },
+        { href: "/admin/reminders", label: t("nav.reminders"), icon: "reminders" },
+        { href: "/admin/events", label: t("nav.events"), icon: "events" },
+        { href: "/admin/audit", label: t("nav.audit"), icon: "audit" },
       ],
     });
   }

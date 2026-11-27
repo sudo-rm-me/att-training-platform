@@ -16,16 +16,19 @@ import { DueChip } from "@/components/due-chip";
 import { getMyAssignments } from "@/lib/assignments";
 import { bannerEvent, featuredEvent } from "@/lib/events";
 import { EventBanner } from "@/components/event-banner";
+import { getT } from "@/i18n/server";
+import type { Translate } from "@/i18n/messages";
 
 export const metadata = { title: "Dashboard" };
 
-function greeting() {
+function greeting(t: Translate) {
   const h = hourIn(new Date());
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  return h < 12 ? t("dash.morning") : h < 18 ? t("dash.afternoon") : t("dash.evening");
 }
 
 export default async function DashboardPage(props: PageProps<"/">) {
   const user = await requireUser();
+  const t = await getT();
   const sp = await props.searchParams;
   const lvl = levelFromXp(user.xp);
   const firstName = user.name.split(" ")[0];
@@ -68,15 +71,13 @@ export default async function DashboardPage(props: PageProps<"/">) {
         <div className="relative flex flex-wrap items-center gap-6 text-white">
           <UserAvatar name={user.name} avatar={user.avatar} className="h-20 w-20 text-2xl ring-4 ring-white/30 animate-float" />
           <div className="min-w-0 flex-1">
-            <p className="text-white/80">{greeting()},</p>
+            <p className="text-white/80">{greeting(t)},</p>
             <h1 className="font-display text-3xl font-bold md:text-4xl">{firstName} ✨</h1>
             <div className="mt-4 max-w-md">
               <div className="flex justify-between text-sm font-semibold">
-                <span>
-                  Level {lvl.level} · {lvl.title}
-                </span>
+                <span>{t("dash.level", { level: lvl.level, title: lvl.title })}</span>
                 <span className="tabular-nums text-white/80">
-                  {lvl.xpForNext - lvl.xpIntoLevel} XP to level {lvl.level + 1}
+                  {t("dash.toNext", { xp: lvl.xpForNext - lvl.xpIntoLevel, next: lvl.level + 1 })}
                 </span>
               </div>
               <Progress value={lvl.progress} className="mt-2 h-3 bg-white/25" barClassName="bg-white" />
@@ -88,15 +89,15 @@ export default async function DashboardPage(props: PageProps<"/">) {
       {featured && <EventBanner event={bannerEvent(featured.event)} initiallyLive={featured.live} />}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Total XP" value={user.xp.toLocaleString()} icon={<Sparkles className="h-5 w-5" />} />
-        <StatTile label="Level" value={lvl.level} icon={<Trophy className="h-5 w-5" />} hint={lvl.title} />
+        <StatTile label={t("dash.totalXp")} value={user.xp.toLocaleString()} icon={<Sparkles className="h-5 w-5" />} />
+        <StatTile label={t("dash.levelTile")} value={lvl.level} icon={<Trophy className="h-5 w-5" />} hint={lvl.title} />
         <StatTile
-          label="Streak"
-          value={`${streak} ${streak === 1 ? "day" : "days"}`}
+          label={t("dash.streak")}
+          value={streak === 1 ? t("dash.day", { n: streak }) : t("dash.days", { n: streak })}
           icon={<Flame className="h-5 w-5 text-[var(--brand-3)]" />}
-          hint={streak > 0 ? `Best: ${user.longestStreak} days` : "Finish a course today to start one"}
+          hint={streak > 0 ? t("dash.best", { n: user.longestStreak }) : t("dash.startStreak")}
         />
-        <StatTile label="Courses done" value={`${completed}/${catalog.length}`} icon={<BookCheck className="h-5 w-5" />} />
+        <StatTile label={t("dash.coursesDone")} value={`${completed}/${catalog.length}`} icon={<BookCheck className="h-5 w-5" />} />
       </div>
 
       {overdue.length > 0 && (
@@ -113,9 +114,9 @@ export default async function DashboardPage(props: PageProps<"/">) {
       {openAssigned.length > 0 && (
         <section>
           <div className="mb-4 flex items-end justify-between">
-            <h2 className="font-display text-xl font-bold">Assigned to you</h2>
+            <h2 className="font-display text-xl font-bold">{t("dash.assigned")}</h2>
             <span className="text-sm text-muted">
-              {assigned.length - openAssigned.length}/{assigned.length} complete
+              {t("dash.complete", { done: assigned.length - openAssigned.length, total: assigned.length })}
             </span>
           </div>
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -132,14 +133,14 @@ export default async function DashboardPage(props: PageProps<"/">) {
 
       <section>
         <div className="mb-4 flex items-end justify-between">
-          <h2 className="font-display text-xl font-bold">{openAssigned.length ? "More to explore" : "Up next"}</h2>
+          <h2 className="font-display text-xl font-bold">{openAssigned.length ? t("dash.moreToExplore") : t("dash.upNext")}</h2>
           <LinkButton href="/courses" variant="ghost" size="sm">
-            All courses →
+            {t("dash.allCourses")}
           </LinkButton>
         </div>
         {upNext.length === 0 ? (
           <Card className="p-8 text-center text-muted">
-            {catalog.length === 0 ? "No courses published yet." : openAssigned.length ? "Nothing else waiting. Focus on your assigned training above." : "You're all caught up. Nice! 🎉"}
+            {catalog.length === 0 ? t("dash.noCourses") : openAssigned.length ? t("dash.focusAssigned") : t("dash.caughtUp")}
           </Card>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">

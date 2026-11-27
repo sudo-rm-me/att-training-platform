@@ -13,6 +13,7 @@ import { Badge, Button, Card, LinkButton } from "@/components/ui";
 import { Confetti, CountUp, LevelUpModal, ScoreRing } from "./celebrate";
 import { RateCourse } from "./rate-course";
 import { myRating } from "@/lib/ratings";
+import { getT } from "@/i18n/server";
 
 export const metadata = { title: "Results" };
 
@@ -25,6 +26,7 @@ function duration(a: Date, b: Date) {
 
 export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/results">) {
   const user = await requireUser();
+  const t = await getT();
   const { attemptId } = await props.params;
   if (!/^[0-9a-f-]{36}$/i.test(attemptId)) notFound();
   const db = await getDb();
@@ -87,10 +89,10 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
         <div className="pointer-events-none absolute inset-x-0 -top-40 mx-auto h-80 w-80 rounded-full bg-brand/25 blur-3xl" />
         <div className="relative flex flex-col items-center">
           <Badge tone={passed ? "success" : "danger"} className="mb-4 px-3 py-1 text-sm">
-            {passed ? "Passed" : "Not passed yet"}
+            {passed ? t("results.passed") : t("results.notPassed")}
           </Badge>
           <h1 className="font-display text-3xl font-extrabold md:text-4xl">
-            {passed ? (score === 100 ? "Flawless! 🏆" : "Great work! 🎉") : "So close — have another go 💪"}
+            {passed ? (score === 100 ? t("results.flawless") : t("results.great")) : t("results.close")}
           </h1>
           <p className="mt-2 text-muted">{course.title}</p>
 
@@ -104,28 +106,28 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
               <div className="mt-1 font-display text-2xl font-bold tabular-nums">
                 {attempt.correctCount ?? 0}/{attempt.questionCount ?? 0}
               </div>
-              <div className="text-xs text-muted">Correct</div>
+              <div className="text-xs text-muted">{t("results.correct")}</div>
             </div>
             <div className="rounded-2xl bg-brand/10 p-4">
               <Sparkles className="mx-auto h-5 w-5 text-brand" />
               <div className="mt-1 font-display text-2xl font-bold text-brand tabular-nums">
                 <CountUp to={totalXp || attempt.xpEarned} prefix="+" />
               </div>
-              <div className="text-xs text-muted">XP earned</div>
+              <div className="text-xs text-muted">{t("results.xp")}</div>
             </div>
             <div className="rounded-2xl bg-accent/15 p-4">
               <Coins className="mx-auto h-5 w-5 text-accent" />
               <div className="mt-1 font-display text-2xl font-bold tabular-nums">
                 <CountUp to={totalCoins || attempt.coinsEarned} prefix="+" />
               </div>
-              <div className="text-xs text-muted">Coins</div>
+              <div className="text-xs text-muted">{t("results.coins")}</div>
             </div>
             <div className="rounded-2xl bg-fg/5 p-4">
               <Clock className="mx-auto h-5 w-5 text-brand" />
               <div className="mt-1 font-display text-2xl font-bold tabular-nums">
                 {duration(attempt.startedAt, attempt.completedAt)}
               </div>
-              <div className="text-xs text-muted">Time</div>
+              <div className="text-xs text-muted">{t("results.time")}</div>
             </div>
           </div>
           {(levelUp || streakEvent || eventBonus || speedXp > 0 || earnedBadges.length > 0) && (
@@ -134,7 +136,7 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
                 <div className="shine flex items-center justify-center gap-3 rounded-2xl bg-brand-gradient px-5 py-4 text-white">
                   <span className="text-3xl">🚀</span>
                   <span className="font-display text-xl font-bold">
-                    Level up! {levelUp.from} → {levelUp.to}
+                    {t("results.levelUp", { from: levelUp.from, to: levelUp.to })}
                   </span>
                   <span className="text-sm opacity-80">{levelFromXp(user.xp).title}</span>
                 </div>
@@ -176,12 +178,12 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
 
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <LinkButton href="/courses" variant="secondary" size="lg">
-              Back to courses
+              {t("results.backToCourses")}
             </LinkButton>
             {canRetake && (
               <form action={retake}>
                 <Button size="lg" variant={passed ? "outline" : "primary"}>
-                  <RotateCcw className="h-4 w-4" /> Retake
+                  <RotateCcw className="h-4 w-4" /> {t("results.retake")}
                 </Button>
               </form>
             )}

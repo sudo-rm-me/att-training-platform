@@ -5,14 +5,19 @@ import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 import { APP_NAME } from "@/lib/brand";
 import { getMyAssignments } from "@/lib/assignments";
+import { getT } from "@/i18n/server";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await requireUser();
-  const sections = buildNav({
-    author: can.author(user.role),
-    manage: can.manage(user.role),
-    admin: can.admin(user.role),
-  });
+  const t = await getT();
+  const sections = buildNav(
+    {
+      author: can.author(user.role),
+      manage: can.manage(user.role),
+      admin: can.admin(user.role),
+    },
+    t,
+  );
 
   const reminders = (await getMyAssignments(user.id, user.department, user.teamId))
     .filter((a) => a.state === "overdue" || a.state === "due_soon" || a.state === "renew")

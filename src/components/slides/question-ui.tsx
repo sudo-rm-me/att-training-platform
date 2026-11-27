@@ -25,6 +25,7 @@ import type { AnswerValue } from "@/db/schema";
 import type { ClientQuestion } from "@/lib/quiz";
 import { QUESTION_TYPE_LABEL } from "@/lib/quiz";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/client";
 
 export type Feedback = {
   correct: boolean;
@@ -49,6 +50,7 @@ type Props = {
 const PAIR_COLORS = ["#60a5fa", "#f472b6", "#34d399", "#fbbf24", "#a78bfa", "#fb7185", "#22d3ee", "#f97316"];
 
 export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview }: Props) {
+  const t = useT();
   const locked = Boolean(feedback) || Boolean(preview);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -225,7 +227,7 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
                   )}
                 >
                   {v ? <Check className="h-[1.4em] w-[1.4em]" /> : <X className="h-[1.4em] w-[1.4em]" />}
-                  {v ? "True" : "False"}
+                  {v ? t("player.true") : t("player.false")}
                 </motion.button>
               );
             })}
@@ -326,22 +328,22 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
             <div className="flex items-center gap-2 font-bold">
               {feedback.correct ? (
                 <>
-                  <Sparkles className="h-[1.1em] w-[1.1em]" /> Correct! +{feedback.points} pts
+                  <Sparkles className="h-[1.1em] w-[1.1em]" /> {t("player.correct", { points: feedback.points })}
                   {!!feedback.bonus && (
                     <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white/25 px-2 py-0.5 text-[0.85em]">
-                      <Zap className="h-[1em] w-[1em]" /> +{feedback.bonus} speed bonus
+                      <Zap className="h-[1em] w-[1em]" /> {t("player.speedBonus", { n: feedback.bonus })}
                     </span>
                   )}
                 </>
               ) : (
                 <>
-                  <X className="h-[1.1em] w-[1.1em]" /> Not quite
+                  <X className="h-[1.1em] w-[1.1em]" /> {t("player.notQuite")}
                 </>
               )}
             </div>
             {!feedback.correct && (
               <div className="mt-1 opacity-95">
-                <span className="font-semibold">Answer: </span>
+                <span className="font-semibold">{t("player.answer")} </span>
                 {feedback.correctAnswer.join(question.type === "ordering" || question.type === "matching" ? " · " : ", ")}
               </div>
             )}
@@ -356,7 +358,7 @@ export function QuestionUI({ question, feedback, onSubmit, dark, accent, preview
               className="rounded-full px-[1.6em] py-[0.6em] text-[1em] font-bold shadow-lg transition disabled:opacity-40"
               style={{ background: accent, color: dark ? "#1b1440" : "#fff" }}
             >
-              {submitting ? "Checking…" : "Check answer"}
+              {submitting ? t("player.checking") : t("player.checkAnswer")}
             </button>
           </motion.div>
         ) : null}
@@ -390,13 +392,30 @@ function OrderingList({
     if (!over || active.id === over.id) return;
     setOrder((o) => arrayMove(o, o.indexOf(String(active.id)), o.indexOf(String(over.id))));
   }
+  const name = (id: string | number) => byId[String(id)]?.text ?? "item";
+  const pos = (id: string | number) => order.indexOf(String(id)) + 1;
   const move = (idx: number, dir: -1 | 1) =>
     setOrder((o) => (idx + dir < 0 || idx + dir >= o.length ? o : arrayMove(o, idx, idx + dir)));
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={onDragEnd}
+      accessibility={{
+        screenReaderInstructions: {
+          draggable: "To reorder, press Space or Enter to pick up an item, use the arrow keys to move it, then Space or Enter to drop it. Escape cancels.",
+        },
+        announcements: {
+          onDragStart: ({ active }) => `Picked up ${name(active.id)}, position ${pos(active.id)} of ${order.length}.`,
+          onDragOver: ({ active, over }) => (over ? `${name(active.id)} is over position ${pos(over.id)} of ${order.length}.` : undefined),
+          onDragEnd: ({ active, over }) => (over ? `Dropped ${name(active.id)} at position ${pos(over.id)} of ${order.length}.` : `Dropped ${name(active.id)}.`),
+          onDragCancel: ({ active }) => `Cancelled. ${name(active.id)} returned to position ${pos(active.id)}.`,
+        },
+      }}
+    >
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
-        <ol className="flex flex-col gap-[0.45em]">
+        <ol className="flex flex-col gap-[0.45em]" aria-label="Items to put in order">
           {order.map((id, idx) => (
             <SortableRow key={id} id={id} disabled={locked} className={surface}>
               <span className="grid h-[1.7em] w-[1.7em] shrink-0 place-items-center rounded-full bg-white/20 text-[0.85em] font-bold">
@@ -405,10 +424,22 @@ function OrderingList({
               <span className="min-w-0 flex-1 font-semibold">{byId[id]?.text}</span>
               {!locked && (
                 <span className="flex gap-1">
-                  <button type="button" aria-label="Move up" onClick={() => move(idx, -1)} className="rounded p-1 hover:bg-white/20">
+                  <button
+                    type="button"
+                    aria-label={`Move "${byId[id]?.text}" up`}
+                    disabled={idx === 0}
+                    onClick={() => move(idx, -1)}
+                    className="rounded p-1 hover:bg-white/20 disabled:opacity-30"
+                  >
                     <ChevronUp className="h-[1em] w-[1em]" />
                   </button>
-                  <button type="button" aria-label="Move down" onClick={() => move(idx, 1)} className="rounded p-1 hover:bg-white/20">
+                  <button
+                    type="button"
+                    aria-label={`Move "${byId[id]?.text}" down`}
+                    disabled={idx === order.length - 1}
+                    onClick={() => move(idx, 1)}
+                    className="rounded p-1 hover:bg-white/20 disabled:opacity-30"
+                  >
                     <ChevronDown className="h-[1em] w-[1em]" />
                   </button>
                 </span>
@@ -444,7 +475,12 @@ function SortableRow({
       )}
     >
       {!disabled && (
-        <span {...attributes} {...listeners} className="cursor-grab touch-none opacity-70" aria-label="Drag to reorder">
+        <span
+          {...attributes}
+          {...listeners}
+          className="cursor-grab touch-none rounded opacity-70 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-white"
+          aria-label="Drag to reorder"
+        >
           <GripVertical className="h-[1.1em] w-[1.1em]" />
         </span>
       )}

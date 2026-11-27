@@ -9,6 +9,7 @@ import {
   Boxes,
   BellRing,
   CalendarHeart,
+  ChartColumn,
   HeartHandshake,
   ClipboardList,
   GraduationCap,
@@ -44,6 +45,7 @@ const ICONS: Record<NavIcon, React.ComponentType<{ className?: string }>> = {
   reminders: BellRing,
   kudos: HeartHandshake,
   events: CalendarHeart,
+  reports: ChartColumn,
 };
 
 function isActive(pathname: string, href: string) {
@@ -56,7 +58,7 @@ function NavList({ sections, onNavigate }: { sections: NavSection[]; onNavigate?
     <nav className="flex flex-col gap-6">
       {sections.map((s) => (
         <div key={s.title}>
-          <div className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-muted/80">{s.title}</div>
+          <div className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-muted">{s.title}</div>
           <ul className="flex flex-col gap-1">
             {s.items.map((item) => {
               const Icon = ICONS[item.icon];

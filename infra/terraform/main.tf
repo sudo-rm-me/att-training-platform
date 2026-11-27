@@ -7,7 +7,7 @@ locals {
   tags       = merge({ app = "att-training" }, var.tags)
   create_env = var.container_app_environment_id == null
   create_law = local.create_env && var.log_analytics_workspace_id == null
-  create_db  = var.database_url == null
+  create_db  = nonsensitive(var.database_url == null)
 
   app_name     = "${var.name_prefix}-app"
   storage_name = substr(replace("${var.name_prefix}media${random_string.suffix.result}", "-", ""), 0, 24)

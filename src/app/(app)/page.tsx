@@ -1,4 +1,11 @@
-import { Coins, Flame, Sparkles, Trophy } from "lucide-react";
+import Link from "next/link";
+import { desc, eq } from "drizzle-orm";
+import { BookCheck, Flame, Sparkles, Trophy } from "lucide-react";
+import { getDb } from "@/db";
+import { userBadges } from "@/db/schema";
+import { BADGE_BY_KEY, BADGES } from "@/lib/badges";
+import { hourIn, liveStreak } from "@/lib/gamification";
+import { BadgeMedal } from "@/components/badge-medal";
 import { requireUser } from "@/lib/session";
 import { levelFromXp } from "@/lib/levels";
 import { Card, LinkButton, Progress, StatTile } from "@/components/ui";
@@ -9,7 +16,7 @@ import { UserAvatar } from "@/components/user-avatar";
 export const metadata = { title: "Dashboard" };
 
 function greeting() {
-  const h = new Date().getHours();
+  const h = hourIn(new Date());
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
@@ -24,6 +31,14 @@ export default async function DashboardPage(props: PageProps<"/">) {
     ...catalog.filter((c) => c.progress.status === "not_started" || c.progress.status === "failed"),
   ].slice(0, 3);
   const completed = catalog.filter((c) => c.progress.status === "completed").length;
+  const streak = liveStreak(user);
+  const db = await getDb();
+  const recentBadges = await db
+    .select()
+    .from(userBadges)
+    .where(eq(userBadges.userId, user.id))
+    .orderBy(desc(userBadges.awardedAt))
+    .limit(6);
 
   return (
     <div className="space-y-8">
@@ -59,9 +74,14 @@ export default async function DashboardPage(props: PageProps<"/">) {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Total XP" value={user.xp.toLocaleString()} icon={<Sparkles className="h-5 w-5" />} />
-        <StatTile label="Coins" value={user.coins.toLocaleString()} icon={<Coins className="h-5 w-5 text-accent" />} />
         <StatTile label="Level" value={lvl.level} icon={<Trophy className="h-5 w-5" />} hint={lvl.title} />
-        <StatTile label="Courses done" value={`${completed}/${catalog.length}`} icon={<Flame className="h-5 w-5 text-[var(--brand-3)]" />} />
+        <StatTile
+          label="Streak"
+          value={`${streak} ${streak === 1 ? "day" : "days"}`}
+          icon={<Flame className="h-5 w-5 text-[var(--brand-3)]" />}
+          hint={streak > 0 ? `Best: ${user.longestStreak} days` : "Finish a course today to start one"}
+        />
+        <StatTile label="Courses done" value={`${completed}/${catalog.length}`} icon={<BookCheck className="h-5 w-5" />} />
       </div>
 
       <section>
@@ -82,6 +102,38 @@ export default async function DashboardPage(props: PageProps<"/">) {
             ))}
           </div>
         )}
+      </section>
+
+      <section>
+        <div className="mb-4 flex items-end justify-between">
+          <h2 className="font-display text-xl font-bold">Badges</h2>
+          <LinkButton href="/badges" variant="ghost" size="sm">
+            All badges →
+          </LinkButton>
+        </div>
+        <Card className="p-6">
+          {recentBadges.length === 0 ? (
+            <div className="flex flex-wrap items-center gap-4">
+              {BADGES.slice(0, 5).map((b) => (
+                <BadgeMedal key={b.key} badge={b} locked size="sm" />
+              ))}
+              <p className="text-sm text-muted">No badges yet. Pass your first course to earn one!</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-6">
+              {recentBadges.map((r) => {
+                const b = BADGE_BY_KEY.get(r.badge);
+                if (!b) return null;
+                return (
+                  <Link key={r.badge} href="/badges" className="flex w-24 flex-col items-center text-center">
+                    <BadgeMedal badge={b} />
+                    <span className="mt-2 text-xs font-semibold">{b.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </Card>
       </section>
     </div>
   );

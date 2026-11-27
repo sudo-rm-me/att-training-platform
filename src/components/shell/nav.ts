@@ -23,6 +23,15 @@ export function buildNav(p: NavPerms): NavSection[] {
       items: [
         { href: "/", label: "Dashboard", icon: "home" },
         { href: "/courses", label: "Courses", icon: "courses" },
+        { href: "/leaderboard", label: "Leaderboard", icon: "leaderboard" },
+        { href: "/badges", label: "Badges", icon: "badges" },
+      ],
+    },
+    {
+      title: "You",
+      items: [
+        { href: "/avatar", label: "Avatar", icon: "avatar" },
+        { href: "/shop", label: "Shop", icon: "shop" },
       ],
     },
   ];

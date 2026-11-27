@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/session";
 import { answerQuestion, AttemptError, completeAttempt, saveProgress } from "@/lib/attempts";
 import type { AnswerValue } from "@/db/schema";
+import { afterCompletion } from "@/lib/gamification";
 
 const answerSchema = z.union([z.array(z.string().max(64)).max(50), z.boolean(), z.record(z.string().max(64), z.string().max(64))]);
 
@@ -26,7 +27,11 @@ export async function saveProgressAction(attemptId: string, index: number) {
 export async function finishAttemptAction(attemptId: string) {
   const user = await requireUser();
   try {
-    await completeAttempt(z.uuid().parse(attemptId), user.id);
+    const res = await completeAttempt(z.uuid().parse(attemptId), user.id);
+    if (res.newlyCompleted) {
+      // Streaks and badges are best-effort: never block the learner on them.
+      await afterCompletion(res.attempt).catch((e) => console.error("afterCompletion failed", e));
+    }
     return { ok: true as const };
   } catch (e) {
     if (e instanceof AttemptError) return { ok: false as const, error: e.message };

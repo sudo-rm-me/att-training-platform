@@ -38,7 +38,7 @@ export function isValidKey(key: string) {
   return KEY_RE.test(key);
 }
 
-const uploadDir = () => path.resolve(process.env.UPLOAD_DIR ?? "./.data/uploads");
+const uploadDir = () => path.resolve(/*turbopackIgnore: true*/ process.env.UPLOAD_DIR ?? "./.data/uploads");
 
 type BlobContainer = import("@azure/storage-blob").ContainerClient;
 let containerPromise: Promise<BlobContainer> | null = null;
@@ -74,7 +74,7 @@ export async function putFile(data: Buffer, contentType: string, folder = "media
       blobHTTPHeaders: { blobContentType: contentType, blobCacheControl: "private, max-age=31536000, immutable" },
     });
   } else {
-    const file = path.join(uploadDir(), key);
+    const file = path.join(/*turbopackIgnore: true*/ uploadDir(), key);
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, data);
   }
@@ -98,7 +98,7 @@ export async function getFile(key: string): Promise<{ body: ReadableStream | Buf
     }
   }
   try {
-    const buf = await fs.readFile(path.join(uploadDir(), key));
+    const buf = await fs.readFile(path.join(/*turbopackIgnore: true*/ uploadDir(), key));
     return { body: buf, size: buf.byteLength };
   } catch {
     return null;

@@ -1,8 +1,11 @@
 import { notFound, redirect } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
-import { Check, Clock, Coins, RotateCcw, Sparkles, Target, X } from "lucide-react";
+import { and, asc, eq, lt, min, sum } from "drizzle-orm";
+import { Check, Clock, Coins, Flame, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { getDb } from "@/db";
-import { attemptAnswers, attempts, courses, slides } from "@/db/schema";
+import { attemptAnswers, attempts, courses, slides, userBadges, users, xpEvents } from "@/db/schema";
+import { BADGE_BY_KEY } from "@/lib/badges";
+import { levelFromXp } from "@/lib/levels";
+import { BadgeMedal } from "@/components/badge-medal";
 import { requireUser } from "@/lib/session";
 import { completedAttemptCount, startOrResumeAttempt } from "@/lib/attempts";
 import { describeAnswer, describeCorrect, QUESTION_TYPE_LABEL } from "@/lib/quiz";
@@ -39,6 +42,27 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
   ).filter((s) => s.kind === "question" && s.question);
   const answers = await db.select().from(attemptAnswers).where(eq(attemptAnswers.attemptId, attemptId));
   const answerBySlide = new Map(answers.map((a) => [a.slideId, a]));
+
+  // Rewards granted for this attempt (course XP, streak bonus, badges).
+  const events = await db.select().from(xpEvents).where(eq(xpEvents.refId, attemptId));
+  const earnedBadges = (await db.select().from(userBadges).where(and(eq(userBadges.userId, user.id), eq(userBadges.refId, attemptId))))
+    .map((b) => BADGE_BY_KEY.get(b.badge))
+    .filter((b) => b != null);
+  const streakEvent = events.find((e) => e.reason === "streak");
+  const totalXp = events.reduce((n, e) => n + e.xp, 0);
+  const totalCoins = events.reduce((n, e) => n + e.coins, 0);
+  let levelUp: { from: number; to: number } | null = null;
+  if (events.length) {
+    const [first] = await db.select({ at: min(xpEvents.createdAt) }).from(xpEvents).where(eq(xpEvents.refId, attemptId));
+    const [before] = await db
+      .select({ xp: sum(xpEvents.xp) })
+      .from(xpEvents)
+      .where(and(eq(xpEvents.userId, user.id), lt(xpEvents.createdAt, first.at!)));
+    const from = levelFromXp(Number(before.xp ?? 0)).level;
+    const to = levelFromXp(Number(before.xp ?? 0) + totalXp).level;
+    if (to > from) levelUp = { from, to };
+  }
+  const [me] = await db.select({ streak: users.currentStreak }).from(users).where(eq(users.id, user.id));
 
   const used = await completedAttemptCount(user.id, course.id);
   const canRetake = course.status === "published" && (course.maxAttempts == null || used < course.maxAttempts);
@@ -82,14 +106,14 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
             <div className="rounded-2xl bg-brand/10 p-4">
               <Sparkles className="mx-auto h-5 w-5 text-brand" />
               <div className="mt-1 font-display text-2xl font-bold text-brand tabular-nums">
-                <CountUp to={attempt.xpEarned} prefix="+" />
+                <CountUp to={totalXp || attempt.xpEarned} prefix="+" />
               </div>
               <div className="text-xs text-muted">XP earned</div>
             </div>
             <div className="rounded-2xl bg-accent/15 p-4">
               <Coins className="mx-auto h-5 w-5 text-accent" />
               <div className="mt-1 font-display text-2xl font-bold tabular-nums">
-                <CountUp to={attempt.coinsEarned} prefix="+" />
+                <CountUp to={totalCoins || attempt.coinsEarned} prefix="+" />
               </div>
               <div className="text-xs text-muted">Coins</div>
             </div>
@@ -101,6 +125,38 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
               <div className="text-xs text-muted">Time</div>
             </div>
           </div>
+          {(levelUp || streakEvent || earnedBadges.length > 0) && (
+            <div className="mt-6 w-full space-y-3">
+              {levelUp && (
+                <div className="shine flex items-center justify-center gap-3 rounded-2xl bg-brand-gradient px-5 py-4 text-white">
+                  <span className="text-3xl">🚀</span>
+                  <span className="font-display text-xl font-bold">
+                    Level up! {levelUp.from} → {levelUp.to}
+                  </span>
+                  <span className="text-sm opacity-80">{levelFromXp(user.xp).title}</span>
+                </div>
+              )}
+              {streakEvent && (
+                <div className="flex items-center justify-center gap-2 rounded-2xl bg-[var(--brand-3)]/12 px-4 py-3 text-sm font-semibold">
+                  <Flame className="h-5 w-5 text-[var(--brand-3)]" /> {me.streak}-day streak! +{streakEvent.xp} bonus XP
+                </div>
+              )}
+              {earnedBadges.length > 0 && (
+                <div className="rounded-2xl bg-fg/5 p-4">
+                  <div className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">New badges</div>
+                  <div className="flex flex-wrap justify-center gap-5">
+                    {earnedBadges.map((b) => (
+                      <div key={b.key} className="flex w-28 flex-col items-center text-center">
+                        <BadgeMedal badge={b} />
+                        <div className="mt-2 text-sm font-bold">{b.name}</div>
+                        <div className="text-xs text-muted">+{b.xp} XP</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {attempt.xpEarned === 0 && used > 1 && (
             <p className="mt-4 text-sm text-muted">Retakes only earn XP when you beat your previous best.</p>
           )}

@@ -162,12 +162,14 @@ export type CompletionResult = {
   xpAwarded: number;
   coinsAwarded: number;
   firstPass: boolean;
+  newlyCompleted: boolean;
 };
 
 export async function completeAttempt(attemptId: string, userId: string): Promise<CompletionResult> {
   const db = await getDb();
   const { attempt, course } = await loadOwnedAttempt(attemptId, userId);
-  if (attempt.completedAt) return { attempt, xpAwarded: attempt.xpEarned, coinsAwarded: attempt.coinsEarned, firstPass: false };
+  if (attempt.completedAt)
+    return { attempt, xpAwarded: attempt.xpEarned, coinsAwarded: attempt.coinsEarned, firstPass: false, newlyCompleted: false };
 
   const questionSlides = await db
     .select()
@@ -197,7 +199,7 @@ export async function completeAttempt(attemptId: string, userId: string): Promis
       .returning();
     if (!done) {
       const [a] = await tx.select().from(attempts).where(eq(attempts.id, attemptId));
-      return { attempt: a, xpAwarded: a.xpEarned, coinsAwarded: a.coinsEarned, firstPass: false };
+      return { attempt: a, xpAwarded: a.xpEarned, coinsAwarded: a.coinsEarned, firstPass: false, newlyCompleted: false };
     }
 
     // XP already granted for this course (this attempt's xpEarned is still 0).
@@ -224,8 +226,8 @@ export async function completeAttempt(attemptId: string, userId: string): Promis
       .set({ xpEarned: xpAwarded, coinsEarned: coinsAwarded })
       .where(eq(attempts.id, attemptId))
       .returning();
-    await grantXp(tx, userId, xpAwarded, coinsAwarded, passed ? "course_passed" : "course_attempt", course.id);
+    await grantXp(tx, userId, xpAwarded, coinsAwarded, passed ? "course_passed" : "course_attempt", attemptId);
 
-    return { attempt: final, xpAwarded, coinsAwarded, firstPass };
+    return { attempt: final, xpAwarded, coinsAwarded, firstPass, newlyCompleted: true };
   });
 }

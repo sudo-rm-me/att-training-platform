@@ -15,6 +15,13 @@
       "when": 1795777967952,
       "tag": "0001_courses",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795778985877,
+      "tag": "0002_gamification",
+      "breakpoints": true
     }
   ]
 }

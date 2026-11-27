@@ -70,26 +70,35 @@ function init() {
   return holder as Required<Holder>;
 }
 
-type DevHolder = Holder & { journalMtime?: number };
+type DevHolder = Holder & { migratedMtime?: number };
 
-/** In development, pick up newly generated migrations without a restart. */
+/**
+ * In development, re-run migrations whenever the journal changes (new
+ * `npm run db:generate`), so the dev server never needs a restart.
+ * Migrations are idempotent, so re-running them is safe.
+ */
 async function devRemigrate(h: Required<Holder>) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const fs = require("node:fs") as typeof import("node:fs");
   const journal = path.join(MIGRATIONS, "meta", "_journal.json");
   const mtime = fs.statSync(journal).mtimeMs;
   const dh = holder as DevHolder;
-  if (dh.journalMtime === undefined) {
-    dh.journalMtime = mtime;
-    return;
-  }
-  if (dh.journalMtime === mtime) return;
-  dh.journalMtime = mtime;
+  if (dh.migratedMtime === mtime) return;
   const url = process.env.DATABASE_URL ?? "pglite:./.data/pglite";
-  const mod = url.startsWith("pglite:") ? "drizzle-orm/pglite/migrator" : "drizzle-orm/node-postgres/migrator";
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { migrate } = require(mod) as { migrate: (db: unknown, o: { migrationsFolder: string }) => Promise<void> };
-  h.ready = migrate(h.db, { migrationsFolder: MIGRATIONS });
+  type Migrate = { migrate: (db: unknown, o: { migrationsFolder: string }) => Promise<void> };
+  const { migrate } = (
+    url.startsWith("pglite:")
+      ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require("drizzle-orm/pglite/migrator")
+      : // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require("drizzle-orm/node-postgres/migrator")
+  ) as Migrate;
+  h.ready = h.ready
+    .catch(() => {})
+    .then(() => migrate(h.db, { migrationsFolder: MIGRATIONS }))
+    .then(() => {
+      dh.migratedMtime = mtime;
+    });
 }
 
 /** Returns the database once migrations have been applied. */

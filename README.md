@@ -56,6 +56,22 @@ This runs the production image against Postgres 17. Production mode turns off th
 
 Infrastructure as code lives in [`infra/`](infra/main.bicep): Container Apps, ACR, PostgreSQL Flexible Server, Blob Storage, Key Vault, Log Analytics and a managed identity. GitHub Actions deploys on every push to `main` using OIDC. See **[docs/DEPLOY.md](docs/DEPLOY.md)** for the Entra app registration and the one-command bootstrap (`infra/bootstrap.sh`).
 
+**Terraform:** to deploy into an existing Terraform repo from the public image (`ghcr.io/sudo-rm-me/att-training-platform`), use the module in [`infra/terraform`](infra/terraform/README.md):
+
+```hcl
+module "training" {
+  source               = "github.com/sudo-rm-me/att-training-platform//infra/terraform?ref=v0.9.0"
+  resource_group_name  = "rg-training"
+  image                = "ghcr.io/sudo-rm-me/att-training-platform:0.9.0"
+  entra_tenant_id      = var.tenant_id
+  entra_client_id      = var.client_id
+  entra_client_secret  = var.client_secret
+  initial_admin_emails = ["you@contoso.com"]
+}
+```
+
+**Releases:** pushing a tag like `v1.2.0` (or running the *Release* workflow) publishes `ghcr.io/sudo-rm-me/att-training-platform:1.2.0`, `:1.2` and `:latest`, and creates a GitHub release.
+
 ## Configuration
 
 | Variable | Purpose |
@@ -70,7 +86,7 @@ Infrastructure as code lives in [`infra/`](infra/main.bicep): Container Apps, AC
 | `AZURE_STORAGE_ACCOUNT_URL`, `AZURE_STORAGE_CONTAINER`, `AZURE_CLIENT_ID` | Blob storage for uploads via managed identity |
 | `UPLOAD_DIR` | Local upload folder when Blob Storage isn't configured |
 | `APP_TIMEZONE` | IANA timezone for streaks and due dates (default `Europe/London`) |
-| `NEXT_PUBLIC_APP_NAME` | Display name (build time) |
+| `APP_NAME` | Display name (runtime; `NEXT_PUBLIC_APP_NAME` still works at build time) |
 | `APP_URL` | Public URL used in email and Teams links |
 | `CRON_SECRET` | Enables `POST /api/cron/reminders` (Bearer token) |
 | `MAIL_SENDER` | Mailbox for reminder emails via Microsoft Graph (`Mail.Send`) |

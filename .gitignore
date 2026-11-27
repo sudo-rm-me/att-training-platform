@@ -51,3 +51,10 @@ next-env.d.ts
 /.next-e2e
 /test-results
 /playwright-report
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.tfvars

@@ -59,6 +59,21 @@ jobs:
           az bicep build --file infra/main.bicep --stdout > /dev/null
           az bicep lint --file infra/main.bicep
 
+  terraform:
+    name: Validate Terraform module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: fmt
+        run: terraform fmt -check -recursive infra/terraform
+      - name: validate module
+        working-directory: infra/terraform
+        run: terraform init -backend=false -input=false && terraform validate
+      - name: validate example
+        working-directory: infra/terraform/examples/basic
+        run: terraform init -backend=false -input=false && terraform validate
+
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest

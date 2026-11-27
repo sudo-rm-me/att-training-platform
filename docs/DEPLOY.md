@@ -1,6 +1,9 @@
 # Deploying to Azure
 
-Academy runs as a single container on **Azure Container Apps**. GitHub Actions builds and deploys it, and the infrastructure is defined in Bicep (`infra/main.bicep`).
+Academy runs as a single container on **Azure Container Apps**. There are two ways to deploy it:
+
+- **This guide:** Bicep (`infra/main.bicep`), with GitHub Actions building your own image and deploying on every push.
+- **Terraform:** the module in [`infra/terraform`](../infra/terraform/README.md) runs the public release image (`ghcr.io/sudo-rm-me/att-training-platform`) and drops into an existing Terraform repo.
 
 ```
                     ┌──────────────── Resource group ────────────────────────────┐

@@ -1,0 +1,107 @@
+name: Deploy to Azure
+
+# Runs on every push to main once the repository variables in docs/DEPLOY.md are set.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC login to Azure (no stored Azure credentials)
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & deploy
+    if: vars.AZURE_RESOURCE_GROUP != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.urls.outputs.app_url }}
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_NAME_PREFIX: ${{ vars.AZURE_NAME_PREFIX || 'att' }}
+      # Read by infra/main.bicepparam
+      ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
+      ENTRA_CLIENT_ID: ${{ vars.ENTRA_CLIENT_ID }}
+      ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET }}
+      AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+      POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      INITIAL_ADMIN_EMAILS: ${{ vars.INITIAL_ADMIN_EMAILS }}
+      APP_TIMEZONE: ${{ vars.APP_TIMEZONE || 'Europe/London' }}
+      MIN_REPLICAS: ${{ vars.MIN_REPLICAS || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Keep the currently running image during the infra update
+        run: |
+          img=$(az containerapp show -g "$RG" -n "$AZURE_NAME_PREFIX-app" \
+            --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
+          case "$img" in *quickstart*) img="" ;; esac
+          echo "CONTAINER_IMAGE=$img" >> "$GITHUB_ENV"
+
+      - name: Provision / update infrastructure
+        run: |
+          az deployment group create -g "$RG" -n "infra-${{ github.run_number }}" \
+            --parameters infra/main.bicepparam \
+            --query properties.outputs -o json > outputs.json
+          echo "ACR_NAME=$(jq -r .acrName.value outputs.json)" >> "$GITHUB_ENV"
+          echo "ACR_SERVER=$(jq -r .acrLoginServer.value outputs.json)" >> "$GITHUB_ENV"
+
+      - name: Log in to the container registry
+        run: az acr login --name "$ACR_NAME"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ACR_SERVER }}/att:${{ github.sha }}
+            ${{ env.ACR_SERVER }}/att:latest
+          build-args: |
+            NEXT_PUBLIC_APP_NAME=${{ vars.APP_NAME || 'Academy' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy new revision
+        run: |
+          export CONTAINER_IMAGE="$ACR_SERVER/att:${{ github.sha }}"
+          az deployment group create -g "$RG" -n "app-${{ github.run_number }}" \
+            --parameters infra/main.bicepparam \
+            --query properties.outputs -o json > outputs.json
+
+      - name: Outputs
+        id: urls
+        run: |
+          echo "app_url=$(jq -r .appUrl.value outputs.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Deployed 🚀"
+            echo ""
+            echo "- App: $(jq -r .appUrl.value outputs.json)"
+            echo "- Entra redirect URI: \`$(jq -r .redirectUri.value outputs.json)\`"
+            echo "- Image: \`$ACR_SERVER/att:${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test
+        run: |
+          url="${{ steps.urls.outputs.app_url }}/api/health"
+          for i in $(seq 1 30); do
+            if curl -fsS "$url"; then echo; exit 0; fi
+            sleep 10
+          done
+          echo "Health check failed: $url" >&2
+          exit 1

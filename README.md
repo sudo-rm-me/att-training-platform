@@ -44,3 +44,23 @@ docker compose up --build
 ```
 
 This runs the production image against Postgres 17. Production mode turns off the dev login, so set the Entra variables in `.env.local` first.
+
+## Deploying to Azure
+
+Infrastructure as code lives in [`infra/`](infra/main.bicep): Container Apps, ACR, PostgreSQL Flexible Server, Blob Storage, Key Vault, Log Analytics and a managed identity. GitHub Actions deploys on every push to `main` using OIDC. See **[docs/DEPLOY.md](docs/DEPLOY.md)** for the Entra app registration and the one-command bootstrap (`infra/bootstrap.sh`).
+
+## Configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `AUTH_SECRET` | Auth.js session encryption secret |
+| `AUTH_MICROSOFT_ENTRA_ID_ID` / `_SECRET` / `_ISSUER` | Entra sign-in app (`https://login.microsoftonline.com/<tenant>/v2.0`) |
+| `INITIAL_ADMIN_EMAILS` | Comma-separated emails that become admins on sign-in |
+| `AUTH_DEV_LOGIN` | `true` enables the local dev login form (ignored in production) |
+| `DATABASE_URL` | Postgres URL. Unset uses embedded PGlite in `./.data` |
+| `DATABASE_SSL` | `true` forces verified TLS |
+| `DATABASE_POOL_MAX`, `RUN_MIGRATIONS` | Pool size (default 10); `false` skips startup migrations |
+| `AZURE_STORAGE_ACCOUNT_URL`, `AZURE_STORAGE_CONTAINER`, `AZURE_CLIENT_ID` | Blob storage for uploads via managed identity |
+| `UPLOAD_DIR` | Local upload folder when Blob Storage isn't configured |
+| `APP_TIMEZONE` | IANA timezone for streaks and due dates (default `Europe/London`) |
+| `NEXT_PUBLIC_APP_NAME` | Display name (build time) |

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
-import { BookCheck, Flame, Sparkles, Trophy } from "lucide-react";
+import { AlarmClock, BookCheck, Flame, Sparkles, Trophy } from "lucide-react";
 import { getDb } from "@/db";
 import { userBadges } from "@/db/schema";
 import { BADGE_BY_KEY, BADGES } from "@/lib/badges";
@@ -12,6 +12,8 @@ import { Card, LinkButton, Progress, StatTile } from "@/components/ui";
 import { listCatalog } from "@/lib/courses";
 import { CourseCard } from "@/components/course-card";
 import { UserAvatar } from "@/components/user-avatar";
+import { DueChip } from "@/components/due-chip";
+import { dueText, getMyAssignments } from "@/lib/assignments";
 
 export const metadata = { title: "Dashboard" };
 
@@ -25,11 +27,16 @@ export default async function DashboardPage(props: PageProps<"/">) {
   const sp = await props.searchParams;
   const lvl = levelFromXp(user.xp);
   const firstName = user.name.split(" ")[0];
-  const catalog = await listCatalog(user.id);
+  const [catalog, assigned] = await Promise.all([listCatalog(user.id), getMyAssignments(user.id, user.department)]);
+  const openAssigned = assigned.filter((a) => a.state !== "done");
+  const assignedIds = new Set(openAssigned.map((a) => a.course.id));
+  const overdue = openAssigned.filter((a) => a.state === "overdue");
   const upNext = [
     ...catalog.filter((c) => c.progress.status === "in_progress"),
     ...catalog.filter((c) => c.progress.status === "not_started" || c.progress.status === "failed"),
-  ].slice(0, 3);
+  ]
+    .filter((c) => !assignedIds.has(c.id))
+    .slice(0, 3);
   const completed = catalog.filter((c) => c.progress.status === "completed").length;
   const streak = liveStreak(user);
   const db = await getDb();
@@ -84,16 +91,47 @@ export default async function DashboardPage(props: PageProps<"/">) {
         <StatTile label="Courses done" value={`${completed}/${catalog.length}`} icon={<BookCheck className="h-5 w-5" />} />
       </div>
 
+      {overdue.length > 0 && (
+        <div className="flex items-center gap-3 rounded-2xl border border-danger/30 bg-danger/10 px-5 py-4 text-danger">
+          <AlarmClock className="h-5 w-5 shrink-0 animate-pulse" />
+          <p className="text-sm font-semibold">
+            {overdue.length === 1
+              ? `“${overdue[0].course.title}” is overdue. Finish it soon to stay compliant.`
+              : `You have ${overdue.length} overdue courses. Finish them soon to stay compliant.`}
+          </p>
+        </div>
+      )}
+
+      {openAssigned.length > 0 && (
+        <section>
+          <div className="mb-4 flex items-end justify-between">
+            <h2 className="font-display text-xl font-bold">Assigned to you</h2>
+            <span className="text-sm text-muted">
+              {assigned.length - openAssigned.length}/{assigned.length} complete
+            </span>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {openAssigned.map((a) => (
+              <CourseCard
+                key={a.course.id}
+                course={a.course}
+                dueLabel={<DueChip state={a.state} text={dueText(a.dueAt)} />}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
         <div className="mb-4 flex items-end justify-between">
-          <h2 className="font-display text-xl font-bold">Up next</h2>
+          <h2 className="font-display text-xl font-bold">{openAssigned.length ? "More to explore" : "Up next"}</h2>
           <LinkButton href="/courses" variant="ghost" size="sm">
             All courses →
           </LinkButton>
         </div>
         {upNext.length === 0 ? (
           <Card className="p-8 text-center text-muted">
-            {catalog.length === 0 ? "No courses published yet." : "You're all caught up. Nice! 🎉"}
+            {catalog.length === 0 ? "No courses published yet." : openAssigned.length ? "Nothing else waiting. Focus on your assigned training above." : "You're all caught up. Nice! 🎉"}
           </Card>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">

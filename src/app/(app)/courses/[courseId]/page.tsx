@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
-import { ArrowLeft, CheckCircle2, Clock, HelpCircle, Layers, Play, RotateCcw, Sparkles, Target, Trophy } from "lucide-react";
+import { ArrowLeft, Award, CheckCircle2, Clock, HelpCircle, Layers, Play, RotateCcw, Sparkles, Target, Trophy } from "lucide-react";
 import { getDb } from "@/db";
 import { attempts, courses } from "@/db/schema";
 import { requireUser, can } from "@/lib/session";
@@ -10,6 +10,8 @@ import { AttemptError, startOrResumeAttempt } from "@/lib/attempts";
 import { getTheme } from "@/lib/themes";
 import { Badge, Button, Card } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
+import { DueChip } from "@/components/due-chip";
+import { dueText, getMyAssignments } from "@/lib/assignments";
 
 export async function generateMetadata(props: PageProps<"/courses/[courseId]">) {
   const { courseId } = await props.params;
@@ -40,6 +42,7 @@ export default async function CoursePage(props: PageProps<"/courses/[courseId]">
       .orderBy(desc(attempts.completedAt))
       .limit(10),
   ]);
+  const assignment = (await getMyAssignments(user.id, user.department)).find((a) => a.course.id === course.id);
   const c = counts.get(course.id) ?? { slides: 0, questions: 0 };
   const p = progress.get(course.id)!;
   const theme = getTheme(course.theme);
@@ -78,6 +81,13 @@ export default async function CoursePage(props: PageProps<"/courses/[courseId]">
                 {course.category}
               </span>
               {course.status !== "published" && <Badge tone="accent">{course.status}</Badge>}
+              {assignment && (
+                <DueChip
+                  state={assignment.state}
+                  text={assignment.state === "done" ? "Assigned · done" : `Assigned · ${dueText(assignment.dueAt)}`}
+                  className={assignment.state === "overdue" ? "bg-rose-500 text-white" : "bg-white/90 text-[#1b1440]"}
+                />
+              )}
               {p.status === "completed" && (
                 <span className="flex items-center gap-1 rounded-full bg-emerald-400/90 px-3 py-1 text-xs font-bold text-emerald-950">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Completed
@@ -114,6 +124,14 @@ export default async function CoursePage(props: PageProps<"/courses/[courseId]">
             )}
             {outOfAttempts && (
               <div className="rounded-2xl bg-black/25 p-4 text-sm">You&apos;ve used all {course.maxAttempts} attempts.</div>
+            )}
+            {p.status === "completed" && (
+              <a
+                href={`/api/certificates/${course.id}`}
+                className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-white/20 px-5 text-sm font-bold backdrop-blur transition hover:bg-white/30"
+              >
+                <Award className="h-4 w-4" /> Download certificate
+              </a>
             )}
             {course.maxAttempts != null && (
               <div className="text-center text-xs opacity-75">

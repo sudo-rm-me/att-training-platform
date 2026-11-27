@@ -6,7 +6,7 @@ import { BADGES, type BadgeDef, type BadgeStats } from "./badges";
 import { levelFromXp } from "./levels";
 import { grantXp } from "./rewards";
 
-const TZ = () => process.env.APP_TIMEZONE || "Europe/London";
+export const TZ = () => process.env.APP_TIMEZONE || "Europe/London";
 
 /** YYYY-MM-DD in the app's timezone. */
 export function dayKey(d: Date) {

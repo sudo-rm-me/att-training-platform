@@ -32,9 +32,19 @@ export function buildNav(p: NavPerms): NavSection[] {
       items: [
         { href: "/avatar", label: "Avatar", icon: "avatar" },
         { href: "/shop", label: "Shop", icon: "shop" },
+        { href: "/certificates", label: "Certificates", icon: "certificates" },
       ],
     },
   ];
+  if (p.manage) {
+    sections.push({
+      title: "Manage",
+      items: [
+        { href: "/team", label: "Team progress", icon: "team" },
+        { href: "/assignments", label: "Assignments", icon: "assignments" },
+      ],
+    });
+  }
   if (p.author) {
     sections.push({ title: "Create", items: [{ href: "/studio", label: "Course studio", icon: "studio" }] });
   }

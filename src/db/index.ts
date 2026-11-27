@@ -50,9 +50,21 @@ function create(): { db: DB; ready: Promise<void> } {
     ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: true } : undefined,
   });
   const db = drizzle(pool, { schema });
-  const ready =
-    process.env.RUN_MIGRATIONS === "false" ? Promise.resolve() : migrate(db, { migrationsFolder: MIGRATIONS });
+  const ready = process.env.RUN_MIGRATIONS === "false" ? Promise.resolve() : migrateLocked(pool, () => migrate(db, { migrationsFolder: MIGRATIONS }));
   return { db, ready };
+}
+
+/** Serialise migrations across replicas that start at the same time. */
+async function migrateLocked(pool: import("pg").Pool, run: () => Promise<void>) {
+  const LOCK = 7_270_001;
+  const client = await pool.connect();
+  try {
+    await client.query("select pg_advisory_lock($1)", [LOCK]);
+    await run();
+  } finally {
+    await client.query("select pg_advisory_unlock($1)", [LOCK]).catch(() => {});
+    client.release();
+  }
 }
 
 function init() {

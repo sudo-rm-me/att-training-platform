@@ -22,6 +22,13 @@
       "when": 1795778985877,
       "tag": "0002_gamification",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795779303818,
+      "tag": "0003_assignments",
+      "breakpoints": true
     }
   ]
 }

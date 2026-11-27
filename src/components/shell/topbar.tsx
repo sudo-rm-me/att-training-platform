@@ -6,9 +6,20 @@ import { levelFromXp } from "@/lib/levels";
 import { UserAvatar } from "@/components/user-avatar";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./sidebar";
+import { Reminders, type Reminder } from "./reminders";
 import type { NavSection } from "./nav";
 
-export function Topbar({ user, sections, appName }: { user: User; sections: NavSection[]; appName: string }) {
+export function Topbar({
+  user,
+  sections,
+  appName,
+  reminders,
+}: {
+  user: User;
+  sections: NavSection[];
+  appName: string;
+  reminders: Reminder[];
+}) {
   const lvl = levelFromXp(user.xp);
   return (
     <header className="sticky top-0 z-30 flex items-center gap-3 px-4 py-4 md:px-8">
@@ -37,13 +48,15 @@ export function Topbar({ user, sections, appName }: { user: User; sections: NavS
         {user.coins}
       </div>
 
+      <Reminders items={reminders} />
+
       <ThemeToggle />
 
       <details className="group relative">
         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full [&::-webkit-details-marker]:hidden">
           <UserAvatar name={user.name} avatar={user.avatar} className="ring-2 ring-white/60 dark:ring-white/10" />
         </summary>
-        <div className="glass absolute right-0 mt-2 w-64 rounded-2xl bg-card-solid p-2">
+        <div className="glass absolute right-0 mt-2 w-64 rounded-2xl bg-card-solid! p-2">
           <div className="px-3 py-2">
             <div className="font-semibold">{user.name}</div>
             <div className="truncate text-xs text-muted">{user.email}</div>
@@ -56,6 +69,9 @@ export function Topbar({ user, sections, appName }: { user: User; sections: NavS
           <div className="my-1 h-px bg-border" />
           <Link href="/" className="block rounded-xl px-3 py-2 text-sm hover:bg-fg/5">
             Dashboard
+          </Link>
+          <Link href="/certificates" className="block rounded-xl px-3 py-2 text-sm hover:bg-fg/5">
+            My certificates
           </Link>
           <form
             action={async () => {

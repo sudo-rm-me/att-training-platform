@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { attempts, courses, slides, type Course } from "@/db/schema";
@@ -61,7 +62,7 @@ export async function progressFor(userId: string, courseIds: string[]) {
   return out;
 }
 
-export async function listCatalog(userId: string): Promise<CatalogCourse[]> {
+export const listCatalog = cache(async (userId: string): Promise<CatalogCourse[]> => {
   const db = await getDb();
   const list = await db
     .select()
@@ -76,4 +77,4 @@ export async function listCatalog(userId: string): Promise<CatalogCourse[]> {
     questionCount: counts.get(c.id)?.questions ?? 0,
     progress: progress.get(c.id)!,
   }));
-}
+});

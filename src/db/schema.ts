@@ -262,3 +262,35 @@ export const userItems = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.item] })],
 );
+
+// ---------------------------------------------------------------------------
+// Assignments
+// ---------------------------------------------------------------------------
+
+export const assignmentTargetEnum = pgEnum("assignment_target", ["user", "department", "everyone"]);
+export type AssignmentTarget = (typeof assignmentTargetEnum.enumValues)[number];
+
+export const assignments = pgTable(
+  "assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    targetType: assignmentTargetEnum("target_type").notNull(),
+    /** Set when targetType = user */
+    targetUserId: uuid("target_user_id").references(() => users.id, { onDelete: "cascade" }),
+    /** Set when targetType = department */
+    targetDepartment: text("target_department"),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    note: text("note"),
+    assignedBy: uuid("assigned_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("assignments_course_idx").on(t.courseId),
+    index("assignments_user_idx").on(t.targetUserId),
+    index("assignments_dept_idx").on(t.targetDepartment),
+  ],
+);
+export type Assignment = typeof assignments.$inferSelect;

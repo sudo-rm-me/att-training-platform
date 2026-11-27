@@ -50,6 +50,13 @@
       "when": 1795782537112,
       "tag": "0006_compliance",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795783454510,
+      "tag": "0007_authoring",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,9 @@ import * as React from "react";
 import { Markdown } from "@/components/markdown";
 import type { SlideTheme } from "@/lib/themes";
 import { cn } from "@/lib/utils";
-import { SlideImage, SlideVideo } from "./media";
+import { SlideImage, SlideVideo, videoEmbedUrl } from "./media";
+import { TrackedMedia } from "./tracked-media";
+import { DocumentViewer } from "./document-viewer";
 
 export type SlideViewProps = {
   theme: SlideTheme;
@@ -16,6 +18,10 @@ export type SlideViewProps = {
   className?: string;
   /** Fixed 16:9 at every size (editor thumbnails); otherwise flows on mobile. */
   fixedAspect?: boolean;
+  /** Video/audio must be played through (no skipping ahead). */
+  requireMedia?: boolean;
+  /** Called when an uploaded video/audio file finishes playing. */
+  onMediaEnded?: () => void;
 };
 
 /**
@@ -31,7 +37,7 @@ export function SlideView(props: SlideViewProps) {
   );
 }
 
-function SlideInner({ theme, layout, kind, title, body, mediaUrl, children, className, fixedAspect }: SlideViewProps) {
+function SlideInner({ theme, layout, kind, title, body, mediaUrl, children, className, fixedAspect, requireMedia, onMediaEnded }: SlideViewProps) {
   const prose = cn("slide-prose", theme.dark ? "[&_a]:text-[var(--slide-accent)]" : "[&_a]:text-[var(--slide-accent)]");
   const style = {
     background: theme.background,
@@ -68,7 +74,17 @@ function SlideInner({ theme, layout, kind, title, body, mediaUrl, children, clas
 
   const media =
     mediaUrl && layout === "video" ? (
-      <SlideVideo url={mediaUrl} className="aspect-video w-full rounded-2xl bg-black/40 shadow-xl" />
+      videoEmbedUrl(mediaUrl) ? (
+        <SlideVideo url={mediaUrl} className="aspect-video w-full rounded-2xl bg-black/40 shadow-xl" />
+      ) : (
+        <TrackedMedia
+          kind="video"
+          url={mediaUrl}
+          noSkip={requireMedia}
+          onEnded={onMediaEnded}
+          className="aspect-video w-full rounded-2xl bg-black/40 shadow-xl"
+        />
+      )
     ) : mediaUrl ? (
       <SlideImage url={mediaUrl} className="h-full max-h-full w-full rounded-2xl object-cover shadow-xl" />
     ) : null;
@@ -149,6 +165,58 @@ function SlideInner({ theme, layout, kind, title, body, mediaUrl, children, clas
             <div className="flex min-h-0 flex-1 items-center justify-center">
               {media ?? <div className="aspect-video w-full rounded-2xl border-2 border-dashed border-current/25" />}
             </div>
+          </div>
+        </div>
+      );
+    case "document":
+      return (
+        <div className={stage} style={style}>
+          {deco}
+          <div className="relative grid h-full items-center gap-[5%] p-[6%] md:grid-cols-[1fr_auto]">
+            <div className="min-w-0">
+              <div className="mb-[0.5em] text-[0.8em] font-bold uppercase tracking-[0.18em] opacity-70">Reading</div>
+              <h2 className="font-display text-[2.4em] font-extrabold leading-[1.08]">{title}</h2>
+              {body && <Markdown source={body} className={cn(prose, "text-[1.15em] opacity-90")} />}
+              <div className="mt-[1.2em]">
+                {mediaUrl ? (
+                  <DocumentViewer url={mediaUrl} title={title} accent={theme.accent} dark={theme.dark} required={requireMedia} onOpened={onMediaEnded} />
+                ) : (
+                  <div className="inline-block rounded-[0.9em] border-2 border-dashed border-current/30 px-[1.2em] py-[0.7em] opacity-70">Upload a PDF</div>
+                )}
+              </div>
+            </div>
+            <div
+              aria-hidden
+              className="hidden aspect-[3/4] w-[11em] rotate-3 flex-col gap-[0.5em] rounded-[0.8em] bg-white/90 p-[1em] shadow-2xl md:flex"
+            >
+              <div className="h-[0.7em] w-2/3 rounded-full" style={{ background: theme.accent }} />
+              {Array.from({ length: 7 }, (_, i) => (
+                <div key={i} className="h-[0.4em] rounded-full bg-black/15" style={{ width: `${70 + ((i * 37) % 30)}%` }} />
+              ))}
+              <div className="mt-auto self-end text-[1.6em] font-black text-black/25">PDF</div>
+            </div>
+          </div>
+        </div>
+      );
+    case "audio":
+      return (
+        <div className={stage} style={style}>
+          {deco}
+          <div className="relative flex h-full flex-col items-center justify-center gap-[0.8em] p-[6%] text-center">
+            <div
+              className="grid h-[4.5em] w-[4.5em] place-items-center rounded-full text-[1.6em] shadow-xl"
+              style={{ background: theme.accent, color: theme.dark ? "#111" : "#fff" }}
+              aria-hidden
+            >
+              🎧
+            </div>
+            {title && <h2 className="font-display text-[2.2em] font-extrabold leading-[1.08]">{title}</h2>}
+            {body && <Markdown source={body} className={cn(prose, "max-w-[75%] text-[1.15em] opacity-90")} />}
+            {mediaUrl ? (
+              <TrackedMedia kind="audio" url={mediaUrl} noSkip={requireMedia} onEnded={onMediaEnded} className="w-[min(100%,32em)]" />
+            ) : (
+              <div className="h-[3em] w-[min(100%,32em)] rounded-full border-2 border-dashed border-current/25" />
+            )}
           </div>
         </div>
       );

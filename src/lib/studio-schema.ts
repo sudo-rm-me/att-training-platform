@@ -46,7 +46,7 @@ export const questionSchema: z.ZodType<QuestionData> = z.discriminatedUnion("typ
   }),
 ]);
 
-export const LAYOUTS = ["title", "content", "image-left", "image-right", "image-full", "video", "quote", "section"] as const;
+export const LAYOUTS = ["title", "content", "image-left", "image-right", "image-full", "video", "audio", "document", "quote", "section"] as const;
 
 const mediaUrl = z
   .string()
@@ -63,6 +63,7 @@ export const slideSchema = z.object({
   mediaUrl,
   notes: text(10000).nullable(),
   question: questionSchema.nullable(),
+  requireMedia: z.boolean().default(false),
 });
 export type EditorSlide = z.infer<typeof slideSchema>;
 
@@ -77,6 +78,8 @@ export const settingsSchema = z.object({
   passMark: z.number().int().min(0).max(100),
   maxAttempts: z.number().int().min(1).max(100).nullable(),
   completionXp: z.number().int().min(0).max(10000),
+  /** Question bank: random questions per attempt (null = all). */
+  drawQuestions: z.number().int().min(1).max(200).nullable().default(null),
 });
 export type CourseSettings = z.infer<typeof settingsSchema>;
 

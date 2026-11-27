@@ -12,6 +12,7 @@ import { cleanQuestion, publishProblems, savePayloadSchema, type EditorSlide } f
 import { putFile, extForType } from "@/lib/storage";
 import { parsePptx } from "@/lib/pptx";
 import { audit } from "@/lib/audit";
+import { publishVersion, restoreVersion } from "@/lib/versions";
 
 const uuid = z.uuid();
 
@@ -44,16 +45,6 @@ export async function saveCourseAction(courseId: string, payload: unknown) {
   const [course] = await db.select().from(courses).where(eq(courses.id, id)).limit(1);
   if (!course) return { ok: false as const, error: "Course not found" };
 
-  // A live course must stay valid while it is being edited.
-  if (course.status === "published") {
-    const problems = publishProblems(list);
-    if (problems.length)
-      return {
-        ok: false as const,
-        error: `Not saved. This course is live: ${problems[0].index >= 0 ? `slide ${problems[0].index + 1}: ` : ""}${problems[0].message}`,
-      };
-  }
-
   await db.transaction(async (tx) => {
     await tx
       .update(courses)
@@ -83,7 +74,8 @@ export async function saveCourseAction(courseId: string, payload: unknown) {
         body: s.body,
         mediaUrl: s.mediaUrl,
         notes: s.notes,
-        question: s.kind === "question" && s.question ? (course.status === "published" ? cleanQuestion(s.question) : s.question) : null,
+        requireMedia: s.requireMedia,
+        question: s.kind === "question" && s.question ? s.question : null,
       };
       await tx
         .insert(slides)
@@ -96,11 +88,12 @@ export async function saveCourseAction(courseId: string, payload: unknown) {
   return { ok: true as const, savedAt: new Date().toISOString() };
 }
 
-export async function setCourseStatusAction(courseId: string, status: "draft" | "published" | "archived") {
+export async function setCourseStatusAction(courseId: string, status: "draft" | "published" | "archived", note?: string) {
   const user = await requirePermission("author");
   const id = uuid.parse(courseId);
   const s = z.enum(["draft", "published", "archived"]).parse(status);
   const db = await getDb();
+  let version: number | null = null;
 
   if (s === "published") {
     const rows = await db.select().from(slides).where(eq(slides.courseId, id)).orderBy(asc(slides.position));
@@ -110,6 +103,8 @@ export async function setCourseStatusAction(courseId: string, status: "draft" | 
     for (const r of rows)
       if (r.kind === "question" && r.question)
         await db.update(slides).set({ question: cleanQuestion(r.question) }).where(eq(slides.id, r.id));
+    // Freeze the slides learners will take from now on.
+    version = (await publishVersion(id, user.id, z.string().max(300).optional().parse(note))).version;
   }
 
   await db
@@ -119,13 +114,25 @@ export async function setCourseStatusAction(courseId: string, status: "draft" | 
   const [c] = await db.select({ title: courses.title }).from(courses).where(eq(courses.id, id));
   await audit(user, {
     action: s === "published" ? "course.publish" : s === "archived" ? "course.archive" : "course.unpublish",
-    summary: c?.title ?? id,
+    summary: `${c?.title ?? id}${version ? ` (version ${version})` : ""}`,
     targetType: "course",
     targetId: id,
   });
   revalidatePath("/studio");
   revalidatePath("/courses");
-  return { ok: true as const };
+  return { ok: true as const, version };
+}
+
+export async function restoreVersionAction(courseId: string, versionId: string) {
+  const user = await requirePermission("author");
+  const id = uuid.parse(courseId);
+  const v = await restoreVersion(id, uuid.parse(versionId));
+  if (!v) return { ok: false as const, error: "Version not found" };
+  const db = await getDb();
+  await db.update(courses).set({ updatedAt: new Date() }).where(eq(courses.id, id));
+  await audit(user, { action: "course.restore", summary: `Draft restored from version ${v.version}`, targetType: "course", targetId: id });
+  revalidatePath(`/studio/${id}`);
+  return { ok: true as const, message: `Draft restored from version ${v.version}. Publish to make it live.` };
 }
 
 export async function deleteCourseAction(courseId: string) {
@@ -179,7 +186,7 @@ export async function uploadMediaAction(fd: FormData) {
   await requirePermission("author");
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0) return { ok: false as const, error: "No file selected" };
-  if (!extForType(file.type)) return { ok: false as const, error: "Use a PNG, JPG, GIF, WebP, SVG, MP4 or WebM file." };
+  if (!extForType(file.type)) return { ok: false as const, error: "Use an image (PNG, JPG, GIF, WebP, SVG), video (MP4, WebM), audio (MP3, M4A, WAV, OGG) or PDF file." };
   try {
     const url = await putFile(Buffer.from(await file.arrayBuffer()), file.type);
     return { ok: true as const, url };
@@ -188,11 +195,66 @@ export async function uploadMediaAction(fd: FormData) {
   }
 }
 
+/** A reading module: the PDF in a pop-up reader, then a starter question to replace. */
+async function importPdf(user: Awaited<ReturnType<typeof requirePermission>>, file: File) {
+  if (file.size > 50 * 1024 * 1024) return { error: "That PDF is over 50 MB." };
+  const data = Buffer.from(await file.arrayBuffer());
+  if (data.subarray(0, 5).toString("latin1") !== "%PDF-") return { error: "That doesn't look like a PDF file." };
+  let url: string;
+  try {
+    url = await putFile(data, "application/pdf", "import");
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  const title = file.name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim().slice(0, 200) || "Reading";
+  const db = await getDb();
+  const course = await db.transaction(async (tx) => {
+    const [c] = await tx
+      .insert(courses)
+      .values({ title, description: `Read the document, then check your understanding.`, createdBy: user.id, estimatedMinutes: 15, icon: "📄" })
+      .returning();
+    await tx.insert(slides).values([
+      { courseId: c.id, position: 0, layout: "title", title, body: "Read the document, then answer a few questions." },
+      {
+        courseId: c.id,
+        position: 1,
+        layout: "document",
+        title,
+        body: "Open the document and read it carefully. Questions follow.",
+        mediaUrl: url,
+        requireMedia: true,
+      },
+      { courseId: c.id, position: 2, layout: "section", title: "Check your understanding", body: "" },
+      {
+        courseId: c.id,
+        position: 3,
+        kind: "question",
+        title: "Question 1",
+        question: {
+          type: "single",
+          prompt: "Replace this with a question about the document",
+          options: [
+            { id: "a", text: "Correct answer" },
+            { id: "b", text: "Wrong answer" },
+            { id: "c", text: "Another wrong answer" },
+          ],
+          correct: ["a"],
+          points: 10,
+        },
+      },
+    ]);
+    await audit(user, { action: "course.import", summary: `${c.title} (${file.name}, PDF reading module)`, targetType: "course", targetId: c.id }, tx);
+    return c;
+  });
+  redirect(`/studio/${course.id}?imported=pdf`);
+}
+
 export async function importPptxAction(_prev: unknown, fd: FormData) {
   const user = await requirePermission("author");
   const file = fd.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose a .pptx file to import." };
-  if (!file.name.toLowerCase().endsWith(".pptx")) return { error: "Only .pptx files are supported (save older .ppt files as .pptx first)." };
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a .pptx or .pdf file to import." };
+  if (file.name.toLowerCase().endsWith(".pdf")) return importPdf(user, file);
+  if (!file.name.toLowerCase().endsWith(".pptx")) return { error: "Use a .pptx or .pdf file (save older .ppt files as .pptx first)." };
   if (file.size > 100 * 1024 * 1024) return { error: "That file is over 100 MB." };
 
   let deck;
@@ -206,10 +268,13 @@ export async function importPptxAction(_prev: unknown, fd: FormData) {
   const title =
     deck.title || deck.slides.find((s) => s.title)?.title || file.name.replace(/\.pptx$/i, "").replace(/[_-]+/g, " ");
 
-  // Upload images first (outside the transaction).
+  // Upload media first (outside the transaction).
   const mediaUrls: (string | null)[] = [];
+  const bodies: string[] = [];
   for (const s of deck.slides) {
     mediaUrls.push(s.image ? await putFile(s.image.data, s.image.contentType, "import").catch(() => null) : null);
+    const extra = await Promise.all(s.extraImages.map((im) => putFile(im.data, im.contentType, "import").catch(() => null)));
+    bodies.push(s.body.replace(/\{\{image:(\d+)\}\}/g, (_, n) => (extra[Number(n)] ? `![](${extra[Number(n)]})` : "")).trim());
   }
 
   const db = await getDb();
@@ -227,9 +292,9 @@ export async function importPptxAction(_prev: unknown, fd: FormData) {
       deck.slides.map((s, i) => ({
         courseId: c.id,
         position: i,
-        layout: mediaUrls[i] ? s.layout : s.layout === "image-full" || s.layout === "image-right" ? "content" : s.layout,
+        layout: mediaUrls[i] ? s.layout : ["image-full", "image-right", "video", "audio"].includes(s.layout) ? "content" : s.layout,
         title: s.title.slice(0, 300),
-        body: s.body.slice(0, 10000),
+        body: bodies[i].slice(0, 10000),
         notes: s.notes?.slice(0, 10000) ?? null,
         mediaUrl: mediaUrls[i],
       })),

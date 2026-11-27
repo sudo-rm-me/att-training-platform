@@ -62,7 +62,7 @@ export function SlideList({ slides, selected, theme, problems, onSelect, onChang
         {menu && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-            <div className="glass absolute left-3 right-3 top-14 z-20 max-h-[70vh] overflow-y-auto rounded-2xl bg-card-solid p-2 md:w-72 md:right-auto">
+            <div className="glass absolute left-3 right-3 top-14 z-20 max-h-[70vh] overflow-y-auto rounded-2xl bg-card-solid! p-2 md:w-72 md:right-auto">
               <div className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-widest text-muted">Content</div>
               {LAYOUT_OPTIONS.map((l) => (
                 <button

@@ -31,6 +31,8 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "team.members": "Team members changed",
   "team.lead": "Team lead changed",
   "reminders.run": "Reminders run",
+  "course.restore": "Course version restored",
+  "course.rate": "Course rated",
 };
 
 /** Record an admin-relevant change. Never throws: auditing must not break the action. */

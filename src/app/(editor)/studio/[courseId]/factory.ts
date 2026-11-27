@@ -44,6 +44,8 @@ export function newContentSlide(layout: SlideLayout): EditorSlide {
     "image-right": "Picture this",
     "image-full": "Full-bleed image",
     video: "Watch this",
+    audio: "Listen to this",
+    document: "Read the policy",
     quote: "Who said it",
   };
   const bodies: Partial<Record<SlideLayout, string>> = {
@@ -51,6 +53,7 @@ export function newContentSlide(layout: SlideLayout): EditorSlide {
     "image-left": "Describe what the image shows.",
     "image-right": "Describe what the image shows.",
     quote: "Something worth remembering.",
+    document: "Open the document and read it carefully. Questions follow.",
     title: "Subtitle goes here",
   };
   return {
@@ -62,6 +65,7 @@ export function newContentSlide(layout: SlideLayout): EditorSlide {
     mediaUrl: null,
     notes: null,
     question: null,
+    requireMedia: false,
   };
 }
 
@@ -75,6 +79,7 @@ export function newQuestionSlide(type: QuestionType): EditorSlide {
     mediaUrl: null,
     notes: null,
     question: defaultQuestion(type),
+    requireMedia: false,
   };
 }
 
@@ -86,6 +91,8 @@ export const LAYOUT_OPTIONS: { value: SlideLayout; label: string }[] = [
   { value: "image-left", label: "Text + image (left)" },
   { value: "image-full", label: "Full image" },
   { value: "video", label: "Video" },
+  { value: "audio", label: "Audio" },
+  { value: "document", label: "Document (PDF)" },
   { value: "quote", label: "Quote" },
 ];
 

@@ -11,7 +11,9 @@ import {
   CloudOff,
   Copy,
   Eye,
+  History,
   ImagePlus,
+  MonitorPlay,
   Loader2,
   Rocket,
   Settings2,
@@ -33,6 +35,7 @@ import {
   deleteCourseAction,
   duplicateCourseAction,
   saveCourseAction,
+  restoreVersionAction,
   setCourseStatusAction,
   uploadMediaAction,
 } from "@/app/(app)/studio/actions";
@@ -50,8 +53,14 @@ export function Editor({
   initialSlides,
   initialStatus,
   importedCount,
+  initialChanges = false,
+  versions = [],
+  feedback = [],
 }: {
+  feedback?: { stars: number; comment: string | null; at: string; name: string }[];
   courseId: string;
+  initialChanges?: boolean;
+  versions?: { id: string; version: number; note: string | null; publishedAt: string; by: string | null; slideCount: number }[];
   initialSettings: CourseSettings;
   initialSlides: EditorSlide[];
   initialStatus: CourseStatus;
@@ -66,6 +75,8 @@ export function Editor({
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  /** Draft differs from what learners see (published courses only). */
+  const [changed, setChanged] = React.useState(initialChanges);
   const version = React.useRef(0);
   const savedVersion = React.useRef(0);
 
@@ -75,7 +86,8 @@ export function Editor({
   const problemSet = React.useMemo(() => new Set(problems.map((p) => p.index)), [problems]);
 
   React.useEffect(() => {
-    if (importedCount) toast.success(`Imported ${importedCount} slides. Now add some questions!`);
+    if (importedCount === -1) toast.success("PDF added as a reading slide. Now write the questions that follow it!");
+    else if (importedCount) toast.success(`Imported ${importedCount} slides. Now add some questions!`);
   }, [importedCount]);
 
   // ---- Autosave ----------------------------------------------------------
@@ -117,6 +129,7 @@ export function Editor({
     setSlides(next);
     if (select !== undefined) setSelected(select);
     touch();
+    setChanged(true);
   };
   const updateSlide = (patch: Partial<EditorSlide>) =>
     updateSlides(slides.map((s, i) => (i === selected ? { ...s, ...patch } : s)));
@@ -126,22 +139,32 @@ export function Editor({
   };
 
   // ---- Status ------------------------------------------------------------
-  async function changeStatus(next: CourseStatus) {
+  async function changeStatus(next: CourseStatus, note?: string) {
     setBusy(true);
     try {
       if (!(await doSave())) {
         toast.error("Fix the save error first.");
         return;
       }
-      const res = await setCourseStatusAction(courseId, next);
+      const res = await setCourseStatusAction(courseId, next, note);
       if (!res.ok) {
         const first = res.problems[0];
         if (first.index >= 0) setSelected(first.index);
         toast.error(`Can't publish yet: ${first.index >= 0 ? `slide ${first.index + 1}: ` : ""}${first.message}`);
         return;
       }
+      const republish = status === "published" && next === "published";
       setStatus(next);
-      toast.success(next === "published" ? "Published! Learners can now take this course 🚀" : next === "draft" ? "Moved back to draft" : "Archived");
+      if (next === "published") setChanged(false);
+      toast.success(
+        republish
+          ? `Version ${res.version} is live. People already part-way through finish the version they started.`
+          : next === "published"
+            ? "Published! Learners can now take this course 🚀"
+            : next === "draft"
+              ? "Moved back to draft"
+              : "Archived",
+      );
       router.refresh();
     } finally {
       setBusy(false);
@@ -187,6 +210,23 @@ export function Editor({
               <Eye className="h-4 w-4" /> View
             </Button>
           </Link>
+        )}
+        <Link href={`/preview/${courseId}`} target="_blank">
+          <Button variant="ghost" size="sm" title="Try the course as a learner. Nothing is recorded.">
+            <MonitorPlay className="h-4 w-4" /> <span className="hidden md:inline">Preview</span>
+          </Button>
+        </Link>
+        {status === "published" && changed && (
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              const note = window.prompt("Publish your changes. What changed? (optional)");
+              if (note !== null) void changeStatus("published", note);
+            }}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />} Publish changes
+          </Button>
         )}
         {status !== "published" ? (
           <Button size="sm" onClick={() => changeStatus("published")} disabled={busy}>
@@ -308,14 +348,50 @@ export function Editor({
                     </Label>
                     <Textarea value={slide.body} onChange={(e) => updateSlide({ body: e.target.value })} className="min-h-40 font-mono text-[13px]" />
                   </div>
-                  {["image-left", "image-right", "image-full", "content", "video"].includes(slide.layout) && (
+                  {["image-left", "image-right", "image-full", "content", "video", "audio", "document"].includes(slide.layout) && (
                     <MediaField
-                      label={slide.layout === "video" ? "Video (YouTube, Vimeo, Stream or upload)" : "Image"}
+                      label={
+                        slide.layout === "video"
+                          ? "Video (YouTube, Vimeo, Stream or upload)"
+                          : slide.layout === "audio"
+                            ? "Audio (MP3, M4A, WAV or OGG)"
+                            : slide.layout === "document"
+                              ? "Document (PDF, opens in a pop-up reader)"
+                              : "Image"
+                      }
                       value={slide.mediaUrl}
-                      accept={slide.layout === "video" ? "video/mp4,video/webm" : "image/*"}
+                      accept={
+                        slide.layout === "video"
+                          ? "video/mp4,video/webm"
+                          : slide.layout === "audio"
+                            ? "audio/*"
+                            : slide.layout === "document"
+                              ? "application/pdf"
+                              : "image/*"
+                      }
                       onChange={(url) => updateSlide({ mediaUrl: url })}
                       onUpload={(f) => upload(f, (url) => updateSlide({ mediaUrl: url }))}
                     />
+                  )}
+                  {(slide.layout === "video" || slide.layout === "audio" || slide.layout === "document") && (
+                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={slide.requireMedia}
+                        onChange={(e) => updateSlide({ requireMedia: e.target.checked })}
+                        className="mt-0.5 h-4 w-4 accent-[var(--brand)]"
+                      />
+                      <span>
+                        <span className="font-semibold">
+                          {slide.layout === "document" ? "Must open the document" : `Must ${slide.layout === "audio" ? "listen" : "watch"} to the end`}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          {slide.layout === "document"
+                            ? "Learners can't move on until they've opened it. Put your questions on the slides after it."
+                            : "Learners can't move on until it finishes. Works with uploaded files (embedded YouTube/Vimeo can't be tracked)."}
+                        </span>
+                      </span>
+                    </label>
                   )}
                 </>
               ) : (
@@ -399,6 +475,21 @@ export function Editor({
             </Select>
           </div>
           <div>
+            <Label>Questions per attempt</Label>
+            <Select
+              value={settings.drawQuestions ?? ""}
+              onChange={(e) => updateSettings({ drawQuestions: e.target.value ? Number(e.target.value) : null })}
+            >
+              <option value="">All questions</option>
+              {[3, 5, 8, 10, 15, 20, 25, 30].map((n) => (
+                <option key={n} value={n}>
+                  {n} at random
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-muted">Question bank: each attempt draws a different random set. Acknowledgements are always included.</p>
+          </div>
+          <div>
             <Label>Completion bonus XP</Label>
             <Input type="number" min={0} value={settings.completionXp} onChange={(e) => updateSettings({ completionXp: Math.max(0, Number(e.target.value) || 0) })} />
           </div>
@@ -410,6 +501,64 @@ export function Editor({
             onUpload={(f) => upload(f, (url) => updateSettings({ coverImage: url }))}
           />
         </div>
+        {feedback.length > 0 && (
+          <div className="mt-6 border-t border-border pt-4">
+            <h3 className="mb-2 font-semibold">
+              Learner feedback · ⭐ {(feedback.reduce((n, f) => n + f.stars, 0) / feedback.length).toFixed(1)}{" "}
+              <span className="font-normal text-muted">({feedback.length})</span>
+            </h3>
+            <ul className="max-h-56 space-y-2 overflow-y-auto">
+              {feedback
+                .filter((f) => f.comment)
+                .map((f, i) => (
+                  <li key={i} className="rounded-xl bg-fg/5 px-3 py-2 text-sm">
+                    <span className="text-amber-500">{"★".repeat(f.stars)}</span>
+                    <span className="text-fg/20">{"★".repeat(5 - f.stars)}</span> {f.comment}
+                    <div className="text-xs text-muted">{f.name}</div>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+        {versions.length > 0 && (
+          <div className="mt-6 border-t border-border pt-4">
+            <h3 className="mb-2 flex items-center gap-2 font-semibold">
+              <History className="h-4 w-4 text-brand" /> Published versions
+            </h3>
+            <p className="mb-3 text-xs text-muted">
+              Learners take the latest version. Edits stay in your draft until you publish them. Settings like the title and pass mark apply straight away.
+            </p>
+            <ul className="max-h-56 divide-y divide-border/60 overflow-y-auto rounded-xl border border-border">
+              {versions.map((v, i) => (
+                <li key={v.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <Badge tone={i === 0 ? "success" : "muted"}>v{v.version}</Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{v.note || `${v.slideCount} slides`}</div>
+                    <div className="text-xs text-muted">
+                      {new Date(v.publishedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+                      {v.by && ` · ${v.by}`}
+                      {i === 0 && " · live"}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      if (!confirm(`Replace your draft slides with version ${v.version}? The live version doesn't change until you publish.`)) return;
+                      const r = await restoreVersionAction(courseId, v.id);
+                      if (r.ok) {
+                        toast.success(r.message);
+                        window.location.reload();
+                      } else toast.error(r.error);
+                    }}
+                  >
+                    <Undo2 className="h-4 w-4" /> Restore
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="mt-6 flex flex-wrap justify-between gap-2 border-t border-border pt-4">
           <div className="flex gap-2">
             <form action={duplicateCourseAction.bind(null, courseId)}>
@@ -485,7 +634,7 @@ function MediaField({
       <div className="flex gap-2">
         <Input value={value ?? ""} placeholder="https://… or upload" onChange={(e) => onChange(e.target.value.trim() || null)} />
         <Button type="button" variant="secondary" size="icon" onClick={() => ref.current?.click()} aria-label="Upload file" title="Upload">
-          {accept.startsWith("video") ? <Upload className="h-4 w-4" /> : <ImagePlus className="h-4 w-4" />}
+          {!accept.startsWith("image") ? <Upload className="h-4 w-4" /> : <ImagePlus className="h-4 w-4" />}
         </Button>
         <input
           ref={ref}

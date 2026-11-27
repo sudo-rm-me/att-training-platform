@@ -4,14 +4,45 @@ import { getDb } from "@/db";
 import {
   attemptAnswers,
   attempts,
+  courseVersions,
   courses,
   slides,
   type AnswerValue,
+  type VersionSlide,
   type Attempt,
   type Course,
 } from "@/db/schema";
 import { describeCorrect, grade, questionPoints, toClientQuestion, type ClientQuestion } from "./quiz";
 import { coinsForXp, grantXp, PERFECT_BONUS_XP } from "./rewards";
+import { ensureVersion, toVersionSlide } from "./versions";
+
+/** Questions that count towards the score (acknowledgements always appear but aren't drawn). */
+const scored = (s: VersionSlide) => s.kind === "question" && !!s.question && s.question.type !== "acknowledge";
+
+/** Pick `n` random question slides for a question-bank attempt. */
+export function drawQuestionIds(list: VersionSlide[], n: number | null, rand: () => number = Math.random): string[] | null {
+  const pool = list.filter(scored).map((s) => s.id);
+  if (!n || n >= pool.length) return null;
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, n);
+}
+
+/** The slides of an attempt: its frozen version, minus questions not drawn. */
+export async function attemptSlides(attempt: Pick<Attempt, "courseId" | "versionId" | "questionIds">): Promise<VersionSlide[]> {
+  const db = await getDb();
+  let list: VersionSlide[];
+  const [v] = attempt.versionId ? await db.select().from(courseVersions).where(eq(courseVersions.id, attempt.versionId)) : [];
+  if (v) list = v.slides.map(toVersionSlide);
+  else list = (await db.select().from(slides).where(eq(slides.courseId, attempt.courseId)).orderBy(asc(slides.position))).map(toVersionSlide);
+  if (attempt.questionIds) {
+    const keep = new Set(attempt.questionIds);
+    list = list.filter((s) => !scored(s) || keep.has(s.id));
+  }
+  return list;
+}
 
 export class AttemptError extends Error {}
 
@@ -47,7 +78,9 @@ export async function startOrResumeAttempt(userId: string, courseId: string, opt
     if (done >= course.maxAttempts) throw new AttemptError("You've used all your attempts for this course.");
   }
 
-  const [created] = await db.insert(attempts).values({ userId, courseId }).returning();
+  const version = await ensureVersion(courseId);
+  const questionIds = drawQuestionIds(version.slides, course.drawQuestions);
+  const [created] = await db.insert(attempts).values({ userId, courseId, versionId: version.id, questionIds }).returning();
   return created;
 }
 
@@ -58,6 +91,7 @@ export type PlayerSlide = {
   title: string;
   body: string;
   mediaUrl: string | null;
+  requireMedia: boolean;
   question: ClientQuestion | null;
 };
 
@@ -84,7 +118,7 @@ async function loadOwnedAttempt(attemptId: string, userId: string) {
 export async function getPlayerData(attemptId: string, userId: string) {
   const db = await getDb();
   const { attempt, course } = await loadOwnedAttempt(attemptId, userId);
-  const rows = await db.select().from(slides).where(eq(slides.courseId, course.id)).orderBy(asc(slides.position));
+  const rows = await attemptSlides(attempt);
   const answers = await db.select().from(attemptAnswers).where(eq(attemptAnswers.attemptId, attempt.id));
 
   const feedback: Record<string, AnswerFeedback> = {};
@@ -107,6 +141,7 @@ export async function getPlayerData(attemptId: string, userId: string) {
     title: s.title,
     body: s.body,
     mediaUrl: s.mediaUrl,
+    requireMedia: s.requireMedia,
     question: s.kind === "question" && s.question ? toClientQuestion(s.question, attempt.id + s.id) : null,
   }));
 
@@ -115,14 +150,10 @@ export async function getPlayerData(attemptId: string, userId: string) {
 
 export async function answerQuestion(attemptId: string, userId: string, slideId: string, answer: AnswerValue) {
   const db = await getDb();
-  const { attempt, course } = await loadOwnedAttempt(attemptId, userId);
+  const { attempt } = await loadOwnedAttempt(attemptId, userId);
   if (attempt.completedAt) throw new AttemptError("This attempt is already finished.");
 
-  const [slide] = await db
-    .select()
-    .from(slides)
-    .where(and(eq(slides.id, slideId), eq(slides.courseId, course.id)))
-    .limit(1);
+  const slide = (await attemptSlides(attempt)).find((s) => s.id === slideId);
   if (!slide?.question) throw new AttemptError("Question not found.");
 
   const [existing] = await db
@@ -171,13 +202,9 @@ export async function completeAttempt(attemptId: string, userId: string): Promis
   if (attempt.completedAt)
     return { attempt, xpAwarded: attempt.xpEarned, coinsAwarded: attempt.coinsEarned, firstPass: false, newlyCompleted: false };
 
-  const questionSlides = await db
-    .select()
-    .from(slides)
-    .where(and(eq(slides.courseId, course.id), eq(slides.kind, "question")));
-  const answers = await db.select().from(attemptAnswers).where(eq(attemptAnswers.attemptId, attemptId));
-
-  const questions = questionSlides.filter((s) => s.question);
+  const questions = (await attemptSlides(attempt)).filter((s) => s.kind === "question" && s.question);
+  const ids = new Set(questions.map((q) => q.id));
+  const answers = (await db.select().from(attemptAnswers).where(eq(attemptAnswers.attemptId, attemptId))).filter((a) => ids.has(a.slideId));
   const totalPoints = questions.reduce((n, s) => n + questionPoints(s.question!), 0);
   const earnedPoints = answers.reduce((n, a) => n + a.points, 0);
   const correctCount = answers.filter((a) => a.correct).length;

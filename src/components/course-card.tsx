@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
-import { CheckCircle2, Clock, HelpCircle, Layers, PlayCircle } from "lucide-react";
+import { CheckCircle2, Clock, HelpCircle, Layers, PlayCircle, Star } from "lucide-react";
 import type { CatalogCourse } from "@/lib/courses";
 import { getTheme } from "@/lib/themes";
 import { Badge, Progress } from "@/components/ui";
@@ -47,6 +47,12 @@ export function CourseCard({ course, dueLabel }: { course: CatalogCourse; dueLab
             {course.questionCount > 0 && (
               <span className="flex items-center gap-1">
                 <HelpCircle className="h-3.5 w-3.5" /> {course.questionCount} questions
+              </span>
+            )}
+            {course.rating && (
+              <span className="flex items-center gap-1" title={`${course.rating.avg} out of 5 from ${course.rating.count} ${course.rating.count === 1 ? "rating" : "ratings"}`}>
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {course.rating.avg.toFixed(1)}
+                <span className="opacity-70">({course.rating.count})</span>
               </span>
             )}
           </div>

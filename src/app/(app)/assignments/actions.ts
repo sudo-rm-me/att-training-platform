@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { assignments, courses, users, type Assignment, type User } from "@/db/schema";
+import { assignments, courses, teams, users, type Assignment, type User } from "@/db/schema";
 import { requireUser, can } from "@/lib/session";
-import { canManageUser } from "@/lib/assignments";
+import { canTarget } from "@/lib/assignments";
+import { scopeFor } from "@/lib/teams";
 import { TZ } from "@/lib/gamification";
 import { audit } from "@/lib/audit";
 
@@ -14,9 +15,10 @@ type Result = { ok: true; message: string } | { ok: false; error: string };
 
 const input = z.object({
   courseId: z.uuid(),
-  targetType: z.enum(["user", "department", "everyone"]),
+  targetType: z.enum(["user", "department", "everyone", "team"]),
   targetUserId: z.uuid().optional(),
   targetDepartment: z.string().trim().min(1).max(200).optional(),
+  targetTeamId: z.uuid().optional(),
   dueDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -47,17 +49,29 @@ function endOfDayIn(date: string, tz: string) {
   return new Date(guess.getTime() - (asIfUtc - guess.getTime()));
 }
 
-const sameDept = (a?: string | null, b?: string | null) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
-
 /** May `me` create/remove this assignment? */
-async function inScope(me: User, a: Pick<Assignment, "targetType" | "targetUserId" | "targetDepartment" | "assignedBy">) {
-  if (me.role === "admin") return true;
-  if (me.role !== "manager") return false;
-  if (a.targetType === "everyone") return false;
-  if (a.targetType === "department") return sameDept(a.targetDepartment, me.department);
+async function inScope(me: User, a: Pick<Assignment, "targetType" | "targetUserId" | "targetDepartment" | "targetTeamId">) {
+  const scope = await scopeFor(me);
+  let targetUser = null;
+  if (a.targetType === "user" && a.targetUserId) {
+    const db = await getDb();
+    [targetUser] = await db.select().from(users).where(eq(users.id, a.targetUserId)).limit(1);
+  }
+  return canTarget(scope, a, targetUser);
+}
+
+async function targetLabel(t: Pick<Assignment, "targetType" | "targetUserId" | "targetDepartment" | "targetTeamId">) {
   const db = await getDb();
-  const [u] = await db.select().from(users).where(eq(users.id, a.targetUserId!)).limit(1);
-  return !!u && canManageUser(me, u);
+  switch (t.targetType) {
+    case "everyone":
+      return "everyone";
+    case "department":
+      return t.targetDepartment ?? "a department";
+    case "team":
+      return (await db.select({ name: teams.name }).from(teams).where(eq(teams.id, t.targetTeamId!)))[0]?.name ?? "a team";
+    case "user":
+      return (await db.select({ name: users.name }).from(users).where(eq(users.id, t.targetUserId!)))[0]?.name ?? "a person";
+  }
 }
 
 function refresh() {
@@ -77,10 +91,12 @@ export async function createAssignmentAction(raw: AssignmentInput): Promise<Resu
     targetType: v.targetType,
     targetUserId: v.targetType === "user" ? (v.targetUserId ?? null) : null,
     targetDepartment: v.targetType === "department" ? (v.targetDepartment ?? null) : null,
+    targetTeamId: v.targetType === "team" ? (v.targetTeamId ?? null) : null,
   };
   if (v.targetType === "user" && !target.targetUserId) return { ok: false, error: "Choose a person." };
   if (v.targetType === "department" && !target.targetDepartment) return { ok: false, error: "Choose a department." };
-  if (!(await inScope(me, { ...target, assignedBy: me.id })))
+  if (v.targetType === "team" && !target.targetTeamId) return { ok: false, error: "Choose a team." };
+  if (!(await inScope(me, target)))
     return { ok: false, error: "You can only assign training to your own team." };
 
   const db = await getDb();
@@ -100,16 +116,12 @@ export async function createAssignmentAction(raw: AssignmentInput): Promise<Resu
         eq(assignments.targetType, target.targetType),
         target.targetUserId ? eq(assignments.targetUserId, target.targetUserId) : isNull(assignments.targetUserId),
         target.targetDepartment ? eq(assignments.targetDepartment, target.targetDepartment) : isNull(assignments.targetDepartment),
+        target.targetTeamId ? eq(assignments.targetTeamId, target.targetTeamId) : isNull(assignments.targetTeamId),
       ),
     )
     .limit(1);
 
-  const who =
-    target.targetType === "everyone"
-      ? "everyone"
-      : target.targetType === "department"
-        ? target.targetDepartment!
-        : ((await db.select({ name: users.name }).from(users).where(eq(users.id, target.targetUserId!)))[0]?.name ?? "a person");
+  const who = await targetLabel(target);
   const auditEntry = {
     summary: `${course.title} → ${who}${dueAt ? ` (due ${v.dueDate})` : ""}`,
     targetType: "course",
@@ -140,7 +152,7 @@ export async function deleteAssignmentAction(id: string): Promise<Result> {
   const [c] = await db.select({ title: courses.title }).from(courses).where(eq(courses.id, a.courseId));
   await audit(me, {
     action: "assignment.delete",
-    summary: `${c?.title ?? "Course"} → ${a.targetType === "department" ? a.targetDepartment : a.targetType}`,
+    summary: `${c?.title ?? "Course"} → ${await targetLabel(a)}`,
     targetType: "course",
     targetId: a.courseId,
   });

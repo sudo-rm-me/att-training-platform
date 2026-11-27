@@ -10,7 +10,8 @@ export type NavIcon =
   | "assignments"
   | "studio"
   | "users"
-  | "audit";
+  | "audit"
+  | "teams";
 
 export type NavItem = { href: string; label: string; icon: NavIcon };
 export type NavSection = { title: string; items: NavItem[] };
@@ -54,6 +55,7 @@ export function buildNav(p: NavPerms): NavSection[] {
       title: "Admin",
       items: [
         { href: "/admin/users", label: "People & roles", icon: "users" },
+        { href: "/admin/teams", label: "Teams", icon: "teams" },
         { href: "/admin/audit", label: "Audit log", icon: "audit" },
       ],
     });

@@ -1,32 +1,35 @@
 "use client";
 
 import * as React from "react";
-import { Building2, Globe2, Send, User as UserIcon } from "lucide-react";
+import { Building2, Globe2, Send, User as UserIcon, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Input, Label, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createAssignmentAction } from "./actions";
 
-type Target = "user" | "department" | "everyone";
+type Target = "user" | "department" | "everyone" | "team";
 
 export function AssignForm({
   courses,
   people,
   departments,
+  teams,
   allowEveryone,
   today,
 }: {
   courses: { id: string; title: string; icon: string }[];
   people: { id: string; name: string; department: string | null }[];
   departments: string[];
+  teams: { id: string; name: string; icon: string }[];
   allowEveryone: boolean;
   today: string;
 }) {
-  const [target, setTarget] = React.useState<Target>(departments.length ? "department" : "user");
+  const [target, setTarget] = React.useState<Target>(teams.length ? "team" : departments.length ? "department" : "user");
   const [pending, start] = React.useTransition();
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const targets: { key: Target; label: string; icon: React.ReactNode; show: boolean }[] = [
+    { key: "team", label: "A team", icon: <Users className="h-4 w-4" />, show: teams.length > 0 },
     { key: "user", label: "A person", icon: <UserIcon className="h-4 w-4" />, show: people.length > 0 },
     { key: "department", label: "A department", icon: <Building2 className="h-4 w-4" />, show: departments.length > 0 },
     { key: "everyone", label: "Everyone", icon: <Globe2 className="h-4 w-4" />, show: allowEveryone },
@@ -43,6 +46,7 @@ export function AssignForm({
         targetType: target,
         targetUserId: target === "user" ? str("targetUserId") : undefined,
         targetDepartment: target === "department" ? str("targetDepartment") : undefined,
+        targetTeamId: target === "team" ? str("targetTeamId") : undefined,
         dueDate: str("dueDate"),
         note: str("note"),
       });
@@ -71,7 +75,7 @@ export function AssignForm({
 
       <div>
         <Label>Assign to</Label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {targets
             .filter((t) => t.show)
             .map((t) => (
@@ -92,6 +96,22 @@ export function AssignForm({
         </div>
       </div>
 
+      {target === "team" && (
+        <div>
+          <Label htmlFor="targetTeamId">Team</Label>
+          <Select id="targetTeamId" name="targetTeamId" required defaultValue={teams.length === 1 ? teams[0].id : ""}>
+            <option value="" disabled>
+              Choose a team…
+            </option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.icon} {t.name}
+              </option>
+            ))}
+          </Select>
+          <p className="mt-1.5 text-xs text-muted">Includes people added to the team later.</p>
+        </div>
+      )}
       {target === "user" && (
         <div>
           <Label htmlFor="targetUserId">Person</Label>

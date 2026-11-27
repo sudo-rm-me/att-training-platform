@@ -27,7 +27,7 @@ export default async function DashboardPage(props: PageProps<"/">) {
   const sp = await props.searchParams;
   const lvl = levelFromXp(user.xp);
   const firstName = user.name.split(" ")[0];
-  const [catalog, assigned] = await Promise.all([listCatalog(user.id), getMyAssignments(user.id, user.department)]);
+  const [catalog, assigned] = await Promise.all([listCatalog(user.id), getMyAssignments(user.id, user.department, user.teamId)]);
   const openAssigned = assigned.filter((a) => a.state !== "done");
   const assignedIds = new Set(openAssigned.map((a) => a.course.id));
   const overdue = openAssigned.filter((a) => a.state === "overdue");

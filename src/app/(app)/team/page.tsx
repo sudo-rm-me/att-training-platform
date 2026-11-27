@@ -1,9 +1,10 @@
 import { asc, inArray } from "drizzle-orm";
-import { AlarmClock, Award, Building2, ChevronDown, ClipboardCheck, Sparkles, Users } from "lucide-react";
+import { AlarmClock, Award, ChevronDown, ClipboardCheck, Sparkles, Users } from "lucide-react";
 import { getDb } from "@/db";
 import { courses } from "@/db/schema";
 import { requirePermission } from "@/lib/session";
 import { dueState, dueText, listDepartments, managedPeople, mergeForUser, passedPairs, publishedAssignments, type DueState } from "@/lib/assignments";
+import { listTeams, scopeFor, teamsByIds } from "@/lib/teams";
 import { levelFromXp } from "@/lib/levels";
 import { liveStreak } from "@/lib/gamification";
 import { Card, EmptyState, LinkButton, PageHeader, Progress, StatTile } from "@/components/ui";
@@ -17,12 +18,19 @@ export default async function TeamPage(props: PageProps<"/team">) {
   const me = await requirePermission("manage");
   const isAdmin = me.role === "admin";
   const sp = await props.searchParams;
-  const deptParam = isAdmin && typeof sp.dept === "string" && sp.dept ? sp.dept : null;
+  const scope = await scopeFor(me);
+  const group = typeof sp.group === "string" ? sp.group : "";
+  const teamParam = group.startsWith("team:") ? group.slice(5) : null;
+  const deptParam = isAdmin && group.startsWith("dept:") ? group.slice(5) : null;
 
-  const [people, all, departments] = await Promise.all([
-    managedPeople(me, deptParam),
-    publishedAssignments(),
+  const [teamOptions, departments] = await Promise.all([
+    isAdmin ? listTeams() : teamsByIds(scope.leadTeamIds),
     isAdmin ? listDepartments() : Promise.resolve([]),
+  ]);
+  const selectedTeam = teamOptions.find((t) => t.id === teamParam) ?? null;
+  const [people, all] = await Promise.all([
+    managedPeople(scope, { teamId: selectedTeam?.id ?? null, department: deptParam }),
+    publishedAssignments(),
   ]);
   const passed = await passedPairs(people.map((p) => p.id));
   const courseIds = [...new Set(all.map((a) => a.courseId))];
@@ -71,31 +79,55 @@ export default async function TeamPage(props: PageProps<"/team">) {
       byCourse.set(i.courseId, c);
     }
 
-  const scopeLabel = isAdmin ? (deptParam ?? "Everyone") : (me.department ?? "Your team");
+  const scopeLabel = selectedTeam
+    ? selectedTeam.name
+    : deptParam
+      ? deptParam
+      : isAdmin
+        ? "everyone"
+        : scope.leadTeamIds.length
+          ? teamOptions.length === 1
+            ? teamOptions[0].name
+            : "your teams"
+          : (me.department ?? "your team");
+  const showPicker = teamOptions.length + departments.length > (isAdmin ? 0 : 1);
 
   return (
     <div>
       <PageHeader
         eyebrow="Manage"
         title="Team progress"
-        subtitle={`How ${scopeLabel} is getting on with assigned training.`}
+        subtitle={`How ${scopeLabel} ${scopeLabel === "your teams" ? "are" : "is"} getting on with assigned training.`}
         actions={
           <>
-            {isAdmin && departments.length > 0 && (
+            {showPicker && (
               <form className="glass flex items-center gap-2 rounded-xl px-3">
-                <Building2 className="h-4 w-4 text-muted" />
+                <Users className="h-4 w-4 text-muted" />
                 <select
-                  name="dept"
-                  defaultValue={deptParam ?? ""}
-                  className="h-10 bg-transparent text-sm font-semibold outline-none"
-                  aria-label="Department"
+                  name="group"
+                  defaultValue={group}
+                  className="h-10 max-w-56 bg-transparent text-sm font-semibold outline-none"
+                  aria-label="Team or department"
                 >
-                  <option value="">All departments</option>
-                  {departments.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
+                  <option value="">{isAdmin ? "Everyone" : "All my teams"}</option>
+                  {teamOptions.length > 0 && (
+                    <optgroup label="Teams">
+                      {teamOptions.map((t) => (
+                        <option key={t.id} value={`team:${t.id}`}>
+                          {t.icon} {t.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {departments.length > 0 && (
+                    <optgroup label="Departments (from Entra)">
+                      {departments.map((d) => (
+                        <option key={d} value={`dept:${d}`}>
+                          {d}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <button className="text-sm font-semibold text-brand">Go</button>
               </form>
@@ -113,8 +145,8 @@ export default async function TeamPage(props: PageProps<"/team">) {
           title="Nobody here yet"
           body={
             isAdmin
-              ? "No one in this department has signed in yet."
-              : "Your profile doesn't have a department, or nobody in it has signed in yet. Departments come from Microsoft Entra."
+              ? "Nobody matches this team or department yet. Add people on the Teams page."
+              : "You don't lead a team yet, or it has no members. Ask an admin to set up your team."
           }
         />
       ) : (

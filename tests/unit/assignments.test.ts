@@ -40,25 +40,48 @@ describe("dueText", () => {
 });
 
 describe("appliesTo", () => {
-  const u = { id: "u1", department: "Engineering" };
+  const u = { id: "u1", department: "Engineering", teamId: "t1" };
   it("matches everyone, the user, and the department case-insensitively", () => {
     expect(appliesTo(a({ targetType: "everyone" }), u)).toBe(true);
     expect(appliesTo(a({ targetType: "user", targetUserId: "u1" }), u)).toBe(true);
     expect(appliesTo(a({ targetType: "user", targetUserId: "u2" }), u)).toBe(false);
     expect(appliesTo(a({ targetType: "department", targetDepartment: " engineering " }), u)).toBe(true);
     expect(appliesTo(a({ targetType: "department", targetDepartment: "Sales" }), u)).toBe(false);
-    expect(appliesTo(a({ targetType: "department", targetDepartment: "Sales" }), { id: "u3", department: null })).toBe(false);
+    expect(appliesTo(a({ targetType: "team", targetTeamId: "t1" }), u)).toBe(true);
+    expect(appliesTo(a({ targetType: "team", targetTeamId: "t2" }), u)).toBe(false);
+    expect(appliesTo(a({ targetType: "team", targetTeamId: "t1" }), { id: "u4", department: null, teamId: null })).toBe(false);
+    expect(appliesTo(a({ targetType: "department", targetDepartment: "Sales" }), { id: "u3", department: null, teamId: null })).toBe(false);
   });
 });
 
 describe("canManageUser", () => {
-  it("lets admins manage anyone and managers only their own department", () => {
-    expect(canManageUser({ role: "admin", department: null }, { department: "Sales" })).toBe(true);
-    expect(canManageUser({ role: "manager", department: "Sales" }, { department: "sales" })).toBe(true);
-    expect(canManageUser({ role: "manager", department: "Sales" }, { department: "Engineering" })).toBe(false);
-    expect(canManageUser({ role: "manager", department: null }, { department: null })).toBe(false);
-    expect(canManageUser({ role: "learner", department: "Sales" }, { department: "Sales" })).toBe(false);
-    expect(canManageUser({ role: "author", department: "Sales" }, { department: "Sales" })).toBe(false);
+  const m = (role: "admin" | "manager" | "learner" | "author", department: string | null, leadTeamIds: string[] = []) => ({
+    role,
+    department,
+    leadTeamIds,
+  });
+  const t = (department: string | null, teamId: string | null = null) => ({ department, teamId });
+
+  it("lets admins manage anyone", () => {
+    expect(canManageUser(m("admin", null), t("Sales"))).toBe(true);
+  });
+
+  it("scopes managers without teams to their own department", () => {
+    expect(canManageUser(m("manager", "Sales"), t("sales"))).toBe(true);
+    expect(canManageUser(m("manager", "Sales"), t("Engineering"))).toBe(false);
+    expect(canManageUser(m("manager", null), t(null))).toBe(false);
+  });
+
+  it("scopes team leads to the teams they lead, ignoring department", () => {
+    const lead = m("manager", "Sales", ["t1", "t2"]);
+    expect(canManageUser(lead, t("Engineering", "t1"))).toBe(true);
+    expect(canManageUser(lead, t("Sales", "t3"))).toBe(false);
+    expect(canManageUser(lead, t("Sales", null))).toBe(false);
+  });
+
+  it("never lets learners or authors manage anyone", () => {
+    expect(canManageUser(m("learner", "Sales", ["t1"]), t("Sales", "t1"))).toBe(false);
+    expect(canManageUser(m("author", "Sales"), t("Sales"))).toBe(false);
   });
 });
 
@@ -73,7 +96,7 @@ describe("mergeForUser", () => {
         a({ targetType: "user", targetUserId: "u1", dueAt: early, note: "urgent" }),
         a({ courseId: "c2", targetType: "department", targetDepartment: "Sales", dueAt: early }),
       ],
-      { id: "u1", department: "Engineering" },
+      { id: "u1", department: "Engineering", teamId: null },
     );
     expect([...merged.keys()]).toEqual(["c1"]);
     expect(merged.get("c1")).toMatchObject({ dueAt: early, note: "urgent" });

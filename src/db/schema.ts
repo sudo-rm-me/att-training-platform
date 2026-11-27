@@ -9,7 +9,10 @@ import {
   index,
   primaryKey,
   boolean,
+  uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const roleEnum = pgEnum("role", ["learner", "manager", "author", "admin"]);
 export type Role = (typeof roleEnum.enumValues)[number];
@@ -50,11 +53,43 @@ export const users = pgTable(
     lastActiveDay: text("last_active_day"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Admin-managed team (one per person). Null = not in a team yet. */
+    teamId: uuid("team_id").references((): AnyPgColumn => teams.id, { onDelete: "set null" }),
   },
-  (t) => [index("users_department_idx").on(t.department)],
+  (t) => [index("users_department_idx").on(t.department), index("users_team_idx").on(t.teamId)],
 );
 
 export type User = typeof users.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Teams (created by admins; leads manage their team's training)
+// ---------------------------------------------------------------------------
+
+export const teams = pgTable(
+  "teams",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    icon: text("icon").notNull().default("👥"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("teams_name_unique").on(sql`lower(${t.name})`)],
+);
+export type Team = typeof teams.$inferSelect;
+
+export const teamLeads = pgTable(
+  "team_leads",
+  {
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.teamId, t.userId] }), index("team_leads_user_idx").on(t.userId)],
+);
 
 // ---------------------------------------------------------------------------
 // Courses & slides
@@ -267,7 +302,7 @@ export const userItems = pgTable(
 // Assignments
 // ---------------------------------------------------------------------------
 
-export const assignmentTargetEnum = pgEnum("assignment_target", ["user", "department", "everyone"]);
+export const assignmentTargetEnum = pgEnum("assignment_target", ["user", "department", "everyone", "team"]);
 export type AssignmentTarget = (typeof assignmentTargetEnum.enumValues)[number];
 
 export const assignments = pgTable(
@@ -282,6 +317,8 @@ export const assignments = pgTable(
     targetUserId: uuid("target_user_id").references(() => users.id, { onDelete: "cascade" }),
     /** Set when targetType = department */
     targetDepartment: text("target_department"),
+    /** Set when targetType = team */
+    targetTeamId: uuid("target_team_id").references(() => teams.id, { onDelete: "cascade" }),
     dueAt: timestamp("due_at", { withTimezone: true }),
     note: text("note"),
     assignedBy: uuid("assigned_by").references(() => users.id, { onDelete: "set null" }),
@@ -291,6 +328,7 @@ export const assignments = pgTable(
     index("assignments_course_idx").on(t.courseId),
     index("assignments_user_idx").on(t.targetUserId),
     index("assignments_dept_idx").on(t.targetDepartment),
+    index("assignments_team_idx").on(t.targetTeamId),
   ],
 );
 export type Assignment = typeof assignments.$inferSelect;

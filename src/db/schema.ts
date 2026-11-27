@@ -44,6 +44,10 @@ export const users = pgTable(
     /** Spendable points (shop currency). */
     coins: integer("coins").notNull().default(0),
     avatar: jsonb("avatar").$type<AvatarConfig>(),
+    currentStreak: integer("current_streak").notNull().default(0),
+    longestStreak: integer("longest_streak").notNull().default(0),
+    /** YYYY-MM-DD in APP_TIMEZONE of the last day a course was completed */
+    lastActiveDay: text("last_active_day"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -221,5 +225,40 @@ export const xpEvents = pgTable(
     refId: text("ref_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("xp_events_user_idx").on(t.userId, t.createdAt), index("xp_events_created_idx").on(t.createdAt)],
+  (t) => [
+    index("xp_events_user_idx").on(t.userId, t.createdAt),
+    index("xp_events_created_idx").on(t.createdAt),
+    index("xp_events_ref_idx").on(t.refId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Gamification
+// ---------------------------------------------------------------------------
+
+export const userBadges = pgTable(
+  "user_badges",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    badge: text("badge").notNull(),
+    /** Attempt that triggered the badge, if any */
+    refId: text("ref_id"),
+    awardedAt: timestamp("awarded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.badge] })],
+);
+
+export const userItems = pgTable(
+  "user_items",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    item: text("item").notNull(),
+    price: integer("price").notNull().default(0),
+    purchasedAt: timestamp("purchased_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.item] })],
 );

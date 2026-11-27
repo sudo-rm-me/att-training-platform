@@ -1,8 +1,11 @@
 import type { AvatarConfig } from "@/db/schema";
-import { cn, initials } from "@/lib/utils";
+import { starterAvatar } from "@/lib/avatar";
+import { cn } from "@/lib/utils";
+import { AvatarSvg } from "./avatar-svg";
 
 export function UserAvatar({
   name,
+  avatar,
   className,
 }: {
   name: string;
@@ -10,14 +13,8 @@ export function UserAvatar({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-brand-gradient text-sm font-bold text-white",
-        className,
-      )}
-      aria-label={name}
-    >
-      {initials(name)}
+    <div className={cn("h-10 w-10 shrink-0 overflow-hidden rounded-full", className)}>
+      <AvatarSvg config={avatar ?? starterAvatar(name)} title={name} className="h-full w-full" />
     </div>
   );
 }

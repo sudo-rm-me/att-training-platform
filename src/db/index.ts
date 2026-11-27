@@ -28,9 +28,13 @@ function create(): { db: DB; ready: Promise<void> } {
     const { drizzle } = require("drizzle-orm/pglite") as typeof import("drizzle-orm/pglite");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { migrate } = require("drizzle-orm/pglite/migrator") as typeof import("drizzle-orm/pglite/migrator");
-    const dir = path.resolve(url.slice("pglite:".length));
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    (require("node:fs") as typeof import("node:fs")).mkdirSync(dir, { recursive: true });
+    const target = url.slice("pglite:".length);
+    let dir = "memory://"; // pglite:memory:// = throwaway in-memory DB (tests)
+    if (target !== "memory://") {
+      dir = path.resolve(/*turbopackIgnore: true*/ target);
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require("node:fs") as typeof import("node:fs")).mkdirSync(dir, { recursive: true });
+    }
     const client = new PGlite(dir);
     const db = drizzle(client, { schema });
     const ready = migrate(db, { migrationsFolder: MIGRATIONS });

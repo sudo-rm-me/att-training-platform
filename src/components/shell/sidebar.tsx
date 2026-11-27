@@ -8,6 +8,7 @@ import {
   BookOpen,
   ClipboardList,
   GraduationCap,
+  History,
   Home,
   Menu,
   PenTool,
@@ -34,6 +35,7 @@ const ICONS: Record<NavIcon, React.ComponentType<{ className?: string }>> = {
   assignments: ClipboardList,
   studio: PenTool,
   users: Users,
+  audit: History,
 };
 
 function isActive(pathname: string, href: string) {

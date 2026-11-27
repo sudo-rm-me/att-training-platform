@@ -11,6 +11,7 @@ import { requirePermission } from "@/lib/session";
 import { cleanQuestion, publishProblems, savePayloadSchema, type EditorSlide } from "@/lib/studio-schema";
 import { putFile, extForType } from "@/lib/storage";
 import { parsePptx } from "@/lib/pptx";
+import { audit } from "@/lib/audit";
 
 const uuid = z.uuid();
 
@@ -26,6 +27,7 @@ export async function createCourseAction() {
       title: "Untitled course",
       body: "A short, punchy subtitle",
     });
+    await audit(user, { action: "course.create", summary: "Created a new course", targetType: "course", targetId: c.id }, tx);
     return c;
   });
   redirect(`/studio/${course.id}`);
@@ -95,7 +97,7 @@ export async function saveCourseAction(courseId: string, payload: unknown) {
 }
 
 export async function setCourseStatusAction(courseId: string, status: "draft" | "published" | "archived") {
-  await requirePermission("author");
+  const user = await requirePermission("author");
   const id = uuid.parse(courseId);
   const s = z.enum(["draft", "published", "archived"]).parse(status);
   const db = await getDb();
@@ -114,21 +116,31 @@ export async function setCourseStatusAction(courseId: string, status: "draft" | 
     .update(courses)
     .set({ status: s, updatedAt: new Date(), ...(s === "published" && { publishedAt: new Date() }) })
     .where(eq(courses.id, id));
+  const [c] = await db.select({ title: courses.title }).from(courses).where(eq(courses.id, id));
+  await audit(user, {
+    action: s === "published" ? "course.publish" : s === "archived" ? "course.archive" : "course.unpublish",
+    summary: c?.title ?? id,
+    targetType: "course",
+    targetId: id,
+  });
   revalidatePath("/studio");
   revalidatePath("/courses");
   return { ok: true as const };
 }
 
 export async function deleteCourseAction(courseId: string) {
-  await requirePermission("author");
+  const user = await requirePermission("author");
   const id = uuid.parse(courseId);
   const db = await getDb();
+  const [c] = await db.select({ title: courses.title }).from(courses).where(eq(courses.id, id));
   const [{ n }] = await db.select({ n: count() }).from(attempts).where(eq(attempts.courseId, id));
   if (n > 0) {
     // Keep learners' history: archive instead of deleting.
     await db.update(courses).set({ status: "archived", updatedAt: new Date() }).where(eq(courses.id, id));
+    await audit(user, { action: "course.archive", summary: `${c?.title ?? id} (has attempts, archived instead of deleted)`, targetType: "course", targetId: id });
   } else {
     await db.delete(courses).where(eq(courses.id, id));
+    await audit(user, { action: "course.delete", summary: c?.title ?? id, targetType: "course", targetId: id });
   }
   revalidatePath("/studio");
   redirect("/studio");
@@ -157,6 +169,7 @@ export async function duplicateCourseAction(courseId: string) {
       .returning();
     if (src.length)
       await tx.insert(slides).values(src.map((s) => ({ ...s, id: randomUUID(), courseId: n.id })));
+    await audit(user, { action: "course.duplicate", summary: `${c.title} → ${n.title}`, targetType: "course", targetId: n.id }, tx);
     return n;
   });
   redirect(`/studio/${copy.id}`);
@@ -221,6 +234,7 @@ export async function importPptxAction(_prev: unknown, fd: FormData) {
         mediaUrl: mediaUrls[i],
       })),
     );
+    await audit(user, { action: "course.import", summary: `${c.title} (${file.name}, ${deck.slides.length} slides)`, targetType: "course", targetId: c.id }, tx);
     return c;
   });
   redirect(`/studio/${course.id}?imported=${deck.slides.length}`);

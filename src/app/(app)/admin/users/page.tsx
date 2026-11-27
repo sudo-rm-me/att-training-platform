@@ -65,7 +65,7 @@ export default async function UsersPage(props: PageProps<"/admin/users">) {
             </thead>
             <tbody>
               {rows.map((u) => (
-                <tr key={u.id} className="border-t border-border/70">
+                <tr key={u.id} data-user-id={u.id} className="border-t border-border/70">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       <UserAvatar name={u.name} avatar={u.avatar} className="h-9 w-9" />

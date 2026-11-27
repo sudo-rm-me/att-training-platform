@@ -8,6 +8,7 @@ import { assignments, courses, users, type Assignment, type User } from "@/db/sc
 import { requireUser, can } from "@/lib/session";
 import { canManageUser } from "@/lib/assignments";
 import { TZ } from "@/lib/gamification";
+import { audit } from "@/lib/audit";
 
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
@@ -103,12 +104,27 @@ export async function createAssignmentAction(raw: AssignmentInput): Promise<Resu
     )
     .limit(1);
 
+  const who =
+    target.targetType === "everyone"
+      ? "everyone"
+      : target.targetType === "department"
+        ? target.targetDepartment!
+        : ((await db.select({ name: users.name }).from(users).where(eq(users.id, target.targetUserId!)))[0]?.name ?? "a person");
+  const auditEntry = {
+    summary: `${course.title} → ${who}${dueAt ? ` (due ${v.dueDate})` : ""}`,
+    targetType: "course",
+    targetId: course.id,
+    meta: { ...target, dueAt: dueAt?.toISOString() ?? null },
+  };
+
   if (existing) {
     await db.update(assignments).set({ dueAt, note: v.note || null, assignedBy: me.id }).where(eq(assignments.id, existing.id));
+    await audit(me, { action: "assignment.update", ...auditEntry });
     refresh();
     return { ok: true, message: "Assignment updated" };
   }
   await db.insert(assignments).values({ courseId: v.courseId, ...target, dueAt, note: v.note || null, assignedBy: me.id });
+  await audit(me, { action: "assignment.create", ...auditEntry });
   refresh();
   return { ok: true, message: `“${course.title}” assigned` };
 }
@@ -121,6 +137,13 @@ export async function deleteAssignmentAction(id: string): Promise<Result> {
   if (!a) return { ok: false, error: "Not found" };
   if (!(await inScope(me, a))) return { ok: false, error: "You can't remove this assignment." };
   await db.delete(assignments).where(eq(assignments.id, id));
+  const [c] = await db.select({ title: courses.title }).from(courses).where(eq(courses.id, a.courseId));
+  await audit(me, {
+    action: "assignment.delete",
+    summary: `${c?.title ?? "Course"} → ${a.targetType === "department" ? a.targetDepartment : a.targetType}`,
+    targetType: "course",
+    targetId: a.courseId,
+  });
   refresh();
   return { ok: true, message: "Assignment removed" };
 }

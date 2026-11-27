@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { attempts, courses, users } from "@/db/schema";
 import { requirePermission } from "@/lib/session";
 import { slideCounts } from "@/lib/courses";
+import { ratingSummary } from "@/lib/ratings";
 import { getTheme } from "@/lib/themes";
 import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
@@ -24,7 +25,7 @@ export default async function StudioPage() {
     .leftJoin(users, eq(users.id, courses.createdBy))
     .orderBy(desc(courses.updatedAt));
   const ids = list.map((r) => r.course.id);
-  const counts = await slideCounts(ids);
+  const [counts, ratings] = await Promise.all([slideCounts(ids), ratingSummary(ids)]);
   const learners = ids.length
     ? await db
         .select({
@@ -85,6 +86,11 @@ export default async function StudioPage() {
                       <span className="flex items-center gap-1">
                         <Users className="h-3.5 w-3.5" /> {s?.passed ?? 0}/{s?.learners ?? 0} passed
                       </span>
+                      {ratings.get(c.id) && (
+                        <span className="flex items-center gap-1">
+                          ⭐ {ratings.get(c.id)!.avg.toFixed(1)} ({ratings.get(c.id)!.count})
+                        </span>
+                      )}
                       <span>Updated {formatDate(c.updatedAt)}</span>
                       {author && <span>by {author}</span>}
                     </div>

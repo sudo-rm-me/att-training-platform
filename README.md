@@ -4,7 +4,10 @@ A training and training-tracking platform: slide-based courses with quizzes, XP,
 
 ## Features
 
-- **Courses**: slide decks with rich questions (single/multiple choice, true/false, ordering, matching), built in the in-app studio or imported from `.pptx`, with a score summary at the end.
+- **Courses**: slide decks with rich questions (single/multiple choice, true/false, ordering, matching, acknowledgement), video and audio slides that can require watching to the end, built in the in-app studio or imported from `.pptx` (text, tables, pictures, backgrounds, embedded video/audio and speaker notes), with a score summary at the end.
+- **Reading modules**: import a PDF (or add a *Document* slide). Learners open it in a pop-up reader, must open it before moving on, then answer the questions that follow.
+- **Authoring**: author preview (nothing recorded), question banks (each attempt draws N random questions), and versioning: every publish freezes the slides, learners finish the version they started, and authors can restore any earlier version into the draft.
+- **Feedback**: learners rate courses 1–5 stars with an optional comment. Averages show on course cards, and authors read comments in the studio.
 - **Gamification**: XP and levels, coins, 15 badges, daily streaks, individual and team leaderboards, a layered SVG character creator and an item shop.
 - **Teams**: admins create teams (or generate one per Entra department), add people and choose team leads. New starters join the team named after their department.
 - **Assignments**: team leads assign courses to their team or its members; admins can assign to any team, department or everyone. Due dates drive in-app reminders (a topbar bell, a dashboard banner and due chips).

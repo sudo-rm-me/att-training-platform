@@ -3,6 +3,7 @@ import { cache } from "react";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { attempts, courses, slides, type Course } from "@/db/schema";
+import { ratingSummary, type RatingSummary } from "./ratings";
 
 export type CourseProgress = {
   status: "not_started" | "in_progress" | "completed" | "failed";
@@ -16,6 +17,7 @@ export type CatalogCourse = Course & {
   slideCount: number;
   questionCount: number;
   progress: CourseProgress;
+  rating: RatingSummary | null;
 };
 
 export async function slideCounts(courseIds: string[]) {
@@ -70,11 +72,15 @@ export const listCatalog = cache(async (userId: string): Promise<CatalogCourse[]
     .where(eq(courses.status, "published"))
     .orderBy(desc(courses.publishedAt));
   const ids = list.map((c) => c.id);
-  const [counts, progress] = await Promise.all([slideCounts(ids), progressFor(userId, ids)]);
-  return list.map((c) => ({
-    ...c,
-    slideCount: counts.get(c.id)?.slides ?? 0,
-    questionCount: counts.get(c.id)?.questions ?? 0,
-    progress: progress.get(c.id)!,
-  }));
+  const [counts, progress, ratings] = await Promise.all([slideCounts(ids), progressFor(userId, ids), ratingSummary(ids)]);
+  return list.map((c) => {
+    const questions = counts.get(c.id)?.questions ?? 0;
+    return {
+      ...c,
+      slideCount: counts.get(c.id)?.slides ?? 0,
+      questionCount: c.drawQuestions ? Math.min(c.drawQuestions, questions) : questions,
+      progress: progress.get(c.id)!,
+      rating: ratings.get(c.id) ?? null,
+    };
+  });
 });

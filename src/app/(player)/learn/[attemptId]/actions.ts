@@ -1,6 +1,8 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { rateCourse } from "@/lib/ratings";
 import { requireUser } from "@/lib/session";
 import { answerQuestion, AttemptError, completeAttempt, saveProgress } from "@/lib/attempts";
 import type { AnswerValue } from "@/db/schema";
@@ -37,4 +39,15 @@ export async function finishAttemptAction(attemptId: string) {
     if (e instanceof AttemptError) return { ok: false as const, error: e.message };
     throw e;
   }
+}
+
+export async function rateCourseAction(courseId: string, stars: number, comment: string) {
+  const user = await requireUser();
+  const id = z.uuid().safeParse(courseId);
+  const n = z.number().int().min(1).max(5).safeParse(stars);
+  if (!id.success || !n.success) return { ok: false as const, error: "Pick 1 to 5 stars." };
+  const ok = await rateCourse(user.id, id.data, n.data, z.string().max(1000).catch("").parse(comment));
+  if (!ok) return { ok: false as const, error: "Finish the course before rating it." };
+  revalidatePath("/courses");
+  return { ok: true as const };
 }

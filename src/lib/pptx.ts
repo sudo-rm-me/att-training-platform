@@ -4,17 +4,24 @@ import JSZip from "jszip";
 import type { SlideLayout } from "@/db/schema";
 
 /**
- * Minimal .pptx reader: pulls titles, bullet text, the first picture and
- * speaker notes out of each slide so they can become editable slides.
- * Complex layouts, charts, SmartArt and animations are not reproduced.
+ * Minimal .pptx reader: pulls titles, bullet text, tables, pictures, slide
+ * background images, embedded video/audio and speaker notes out of each
+ * slide so they can become editable slides. Charts, SmartArt and
+ * animations are not reproduced.
  */
+
+export type ImportedFile = { data: Buffer; contentType: string };
 
 export type ImportedSlide = {
   layout: SlideLayout;
   title: string;
+  /** Markdown. Extra pictures are referenced as {{image:N}} (index into `extraImages`). */
   body: string;
   notes: string | null;
-  image: { data: Buffer; contentType: string } | null;
+  /** The slide's main picture, video or audio (becomes the slide media). */
+  image: ImportedFile | null;
+  /** Further pictures on the slide, shown as a gallery under the text. */
+  extraImages: ImportedFile[];
 };
 
 export type ImportedDeck = { title: string | null; slides: ImportedSlide[] };
@@ -27,7 +34,33 @@ const IMAGE_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+const MEDIA_TYPES: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".wav": "audio/wav",
+};
+
 const MAX_SLIDES = 200;
+const MAX_EXTRA_IMAGES = 4;
+
+/** Markdown table from a DrawingML table. */
+function tableMarkdown(tblXml: string): string {
+  const rows = [...tblXml.matchAll(/<a:tr\b[\s\S]*?<\/a:tr>/g)].map((tr) =>
+    [...tr[0].matchAll(/<a:tc\b[\s\S]*?<\/a:tc>/g)].map((tc) =>
+      paragraphs(tc[0])
+        .map((p) => p.text)
+        .join(" ")
+        .replace(/\|/g, "/"),
+    ),
+  );
+  if (rows.length === 0) return "";
+  const width = Math.max(...rows.map((r) => r.length));
+  const line = (r: string[]) => `| ${Array.from({ length: width }, (_, i) => r[i] || " ").join(" | ")} |`;
+  return [line(rows[0]), `|${" --- |".repeat(width)}`, ...rows.slice(1).map(line)].join("\n");
+}
 const MAX_UNZIPPED = 300 * 1024 * 1024;
 
 function decode(s: string) {
@@ -135,19 +168,44 @@ export async function parsePptx(data: Buffer): Promise<ImportedDeck> {
       bodyLines.push("");
     }
 
-    // First picture on the slide.
-    let image: ImportedSlide["image"] = null;
-    const embed = /<p:pic>[\s\S]*?<a:blip\b[^>]*\br:embed="([^"]+)"/.exec(xml)?.[1];
-    if (embed) {
-      const rel = rels.get(embed);
-      if (rel) {
-        const mediaPath = resolve(file, rel.target);
-        const ext = path.posix.extname(mediaPath).toLowerCase();
-        const contentType = IMAGE_TYPES[ext];
-        const f = zip.file(mediaPath);
-        if (contentType && f) image = { data: await f.async("nodebuffer"), contentType };
-      }
+    // Tables become markdown tables.
+    for (const t of xml.matchAll(/<a:tbl>[\s\S]*?<\/a:tbl>/g)) {
+      const md = tableMarkdown(t[0]);
+      if (md) bodyLines.push(md, "");
     }
+
+    const load = async (relId: string | undefined, types: Record<string, string>): Promise<ImportedFile | null> => {
+      const rel = relId ? rels.get(relId) : undefined;
+      if (!rel || /^https?:/i.test(rel.target)) return null;
+      const mediaPath = resolve(file, rel.target);
+      const contentType = types[path.posix.extname(mediaPath).toLowerCase()];
+      const f = zip.file(mediaPath);
+      return contentType && f ? { data: await f.async("nodebuffer"), contentType } : null;
+    };
+
+    // Embedded video/audio (Office 2010+ stores it as a p14:media relationship).
+    let media: ImportedFile | null = null;
+    for (const pic of xml.matchAll(/<p:pic>[\s\S]*?<\/p:pic>/g)) {
+      const mediaRel = /<p14:media\b[^>]*\br:embed="([^"]+)"/.exec(pic[0])?.[1] ?? /<a:(?:videoFile|audioFile)\b[^>]*\br:link="([^"]+)"/.exec(pic[0])?.[1];
+      media = await load(mediaRel, MEDIA_TYPES);
+      if (media) break;
+    }
+
+    // Pictures (skipping the poster frames of videos).
+    const pictures: ImportedFile[] = [];
+    for (const pic of xml.matchAll(/<p:pic>[\s\S]*?<\/p:pic>/g)) {
+      if (/<p14:media\b|<a:(?:videoFile|audioFile)\b/.test(pic[0])) continue;
+      const img = await load(/<a:blip\b[^>]*\br:embed="([^"]+)"/.exec(pic[0])?.[1], IMAGE_TYPES);
+      if (img) pictures.push(img);
+      if (pictures.length > MAX_EXTRA_IMAGES) break;
+    }
+
+    // Background picture, used when the slide has no picture of its own.
+    const bgRel = /<p:bg>[\s\S]*?<a:blip\b[^>]*\br:embed="([^"]+)"[\s\S]*?<\/p:bg>/.exec(xml)?.[1];
+    const background = pictures.length === 0 && !media ? await load(bgRel, IMAGE_TYPES) : null;
+
+    const image = media ?? pictures[0] ?? background;
+    const extraImages = media ? pictures.slice(0, MAX_EXTRA_IMAGES) : pictures.slice(1, MAX_EXTRA_IMAGES + 1);
 
     // Speaker notes.
     let notes: string | null = null;
@@ -171,12 +229,15 @@ export async function parsePptx(data: Buffer): Promise<ImportedDeck> {
       .trim();
 
     let layout: SlideLayout = "content";
-    if (isTitleSlide) layout = "title";
+    if (media) layout = media.contentType.startsWith("audio") ? "audio" : "video";
+    else if (isTitleSlide) layout = background ? "image-full" : "title";
     else if (image && !body) layout = "image-full";
+    else if (background) layout = "image-full";
     else if (image) layout = "image-right";
     else if (!body && title) layout = "section";
 
-    slides.push({ layout, title, body, notes, image });
+    const gallery = extraImages.map((_, i) => `{{image:${i}}}`).join("\n");
+    slides.push({ layout, title, body: gallery ? `${body}\n\n${gallery}`.trim() : body, notes, image, extraImages });
   }
 
   return { title: deckTitle, slides };

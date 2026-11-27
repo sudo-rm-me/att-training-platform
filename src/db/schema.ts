@@ -119,6 +119,8 @@ export const courses = pgTable(
     maxAttempts: integer("max_attempts"),
     /** Bonus XP for passing (on top of per-question points). */
     completionXp: integer("completion_xp").notNull().default(50),
+    /** Question bank: each attempt draws this many random questions. Null = all. */
+    drawQuestions: integer("draw_questions"),
     status: courseStatusEnum("status").notNull().default("draft"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -136,6 +138,8 @@ export type SlideLayout =
   | "image-right"
   | "image-full"
   | "video"
+  | "audio"
+  | "document"
   | "quote"
   | "section";
 
@@ -200,10 +204,53 @@ export const slides = pgTable(
     mediaUrl: text("media_url"),
     notes: text("notes"),
     question: jsonb("question").$type<QuestionData>(),
+    /** Video/audio must be played to the end before moving on. */
+    requireMedia: boolean("require_media").notNull().default(false),
   },
   (t) => [index("slides_course_idx").on(t.courseId, t.position)],
 );
 export type Slide = typeof slides.$inferSelect;
+
+/** The slide fields frozen into a published version. */
+export type VersionSlide = Pick<Slide, "id" | "position" | "kind" | "layout" | "title" | "body" | "mediaUrl" | "notes" | "question" | "requireMedia">;
+
+/**
+ * Every publish freezes the slides. Learners always take a published version,
+ * so authors can keep editing the draft without changing live attempts.
+ */
+export const courseVersions = pgTable(
+  "course_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    slides: jsonb("slides").$type<VersionSlide[]>().notNull(),
+    note: text("note"),
+    publishedBy: uuid("published_by").references(() => users.id, { onDelete: "set null" }),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("course_versions_course_version").on(t.courseId, t.version)],
+);
+export type CourseVersion = typeof courseVersions.$inferSelect;
+
+/** Learner feedback: one rating per person per course (editable). */
+export const courseRatings = pgTable(
+  "course_ratings",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    stars: integer("stars").notNull(),
+    comment: text("comment"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.courseId] }), index("course_ratings_course_idx").on(t.courseId)],
+);
 
 // ---------------------------------------------------------------------------
 // Attempts & answers
@@ -229,6 +276,10 @@ export const attempts = pgTable(
     passed: boolean("passed"),
     xpEarned: integer("xp_earned").notNull().default(0),
     coinsEarned: integer("coins_earned").notNull().default(0),
+    /** Published version being taken. Null for attempts from before versioning. */
+    versionId: uuid("version_id").references((): AnyPgColumn => courseVersions.id, { onDelete: "set null" }),
+    /** Question bank draw for this attempt. Null = every question. */
+    questionIds: jsonb("question_ids").$type<string[]>(),
   },
   (t) => [index("attempts_user_course_idx").on(t.userId, t.courseId), index("attempts_course_idx").on(t.courseId)],
 );
@@ -242,9 +293,8 @@ export const attemptAnswers = pgTable(
     attemptId: uuid("attempt_id")
       .notNull()
       .references(() => attempts.id, { onDelete: "cascade" }),
-    slideId: uuid("slide_id")
-      .notNull()
-      .references(() => slides.id, { onDelete: "cascade" }),
+    /** Slide id inside the attempt's version (no FK: drafts may delete the slide). */
+    slideId: uuid("slide_id").notNull(),
     answer: jsonb("answer").$type<AnswerValue>().notNull(),
     correct: boolean("correct").notNull(),
     points: integer("points").notNull().default(0),

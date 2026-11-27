@@ -1,16 +1,18 @@
 import { notFound, redirect } from "next/navigation";
-import { and, asc, eq, lt, min, sum } from "drizzle-orm";
+import { and, eq, lt, min, sum } from "drizzle-orm";
 import { Check, Clock, Coins, Flame, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { getDb } from "@/db";
-import { attemptAnswers, attempts, courses, slides, userBadges, users, xpEvents } from "@/db/schema";
+import { attemptAnswers, attempts, courses, userBadges, users, xpEvents } from "@/db/schema";
 import { BADGE_BY_KEY } from "@/lib/badges";
 import { levelFromXp } from "@/lib/levels";
 import { BadgeMedal } from "@/components/badge-medal";
 import { requireUser } from "@/lib/session";
-import { completedAttemptCount, startOrResumeAttempt } from "@/lib/attempts";
+import { attemptSlides, completedAttemptCount, startOrResumeAttempt } from "@/lib/attempts";
 import { describeAnswer, describeCorrect, QUESTION_TYPE_LABEL } from "@/lib/quiz";
 import { Badge, Button, Card, LinkButton } from "@/components/ui";
 import { Confetti, CountUp, ScoreRing } from "./celebrate";
+import { RateCourse } from "./rate-course";
+import { myRating } from "@/lib/ratings";
 
 export const metadata = { title: "Results" };
 
@@ -37,9 +39,7 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
   const { attempt, course } = row;
   if (!attempt.completedAt) redirect(`/learn/${attemptId}`);
 
-  const questionSlides = (
-    await db.select().from(slides).where(eq(slides.courseId, course.id)).orderBy(asc(slides.position))
-  ).filter((s) => s.kind === "question" && s.question);
+  const questionSlides = (await attemptSlides(attempt)).filter((s) => s.kind === "question" && s.question);
   const answers = await db.select().from(attemptAnswers).where(eq(attemptAnswers.attemptId, attemptId));
   const answerBySlide = new Map(answers.map((a) => [a.slideId, a]));
 
@@ -64,7 +64,7 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
   }
   const [me] = await db.select({ streak: users.currentStreak }).from(users).where(eq(users.id, user.id));
 
-  const used = await completedAttemptCount(user.id, course.id);
+  const [used, rating] = await Promise.all([completedAttemptCount(user.id, course.id), myRating(user.id, course.id)]);
   const canRetake = course.status === "published" && (course.maxAttempts == null || used < course.maxAttempts);
   const passed = Boolean(attempt.passed);
   const score = attempt.score ?? 0;
@@ -179,6 +179,9 @@ export default async function ResultsPage(props: PageProps<"/learn/[attemptId]/r
           {!canRetake && !passed && course.maxAttempts != null && (
             <p className="mt-3 text-sm text-muted">You&apos;ve used all {course.maxAttempts} attempts. Speak to your manager.</p>
           )}
+          <div className="mt-8 border-t border-border pt-6">
+            <RateCourse courseId={course.id} initialStars={rating?.stars ?? null} initialComment={rating?.comment ?? null} />
+          </div>
         </div>
       </Card>
 

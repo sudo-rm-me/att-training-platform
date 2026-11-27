@@ -3,8 +3,19 @@ import * as React from "react";
 /**
  * Tiny, safe markdown renderer (no raw HTML). Supports:
  * # / ## / ### headings, paragraphs, - or * bullets, 1. numbered lists,
- * **bold**, *italic*, `code`, [links](https://…) and > quotes.
+ * **bold**, *italic*, `code`, [links](https://…), > quotes, | tables |
+ * and image lines ![alt](/api/media/… or https://…).
  */
+
+const IMAGE_LINE = /^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$/;
+const TABLE_LINE = /^\s*\|.*\|\s*$/;
+const safeSrc = (u: string) => (u.startsWith("/api/media/") || /^https:\/\//i.test(u) ? u : null);
+const cells = (line: string) =>
+  line
+    .trim()
+    .replace(/^\||\|$/g, "")
+    .split("|")
+    .map((c) => c.trim());
 export function Markdown({ source, className }: { source: string; className?: string }) {
   return <div className={className}>{renderBlocks(source)}</div>;
 }
@@ -54,6 +65,61 @@ function renderBlocks(src: string): React.ReactNode[] {
       );
       continue;
     }
+    if (IMAGE_LINE.test(line)) {
+      const imgs: { alt: string; src: string }[] = [];
+      while (i < lines.length && IMAGE_LINE.test(lines[i])) {
+        const m = IMAGE_LINE.exec(lines[i++])!;
+        const src = safeSrc(m[2]);
+        if (src) imgs.push({ alt: m[1], src });
+      }
+      if (imgs.length)
+        out.push(
+          <div key={key++} className="mt-3 flex flex-wrap gap-3">
+            {imgs.map((im, n) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={n} src={im.src} alt={im.alt} className="max-h-[12em] min-w-0 flex-1 rounded-xl object-contain" draggable={false} />
+            ))}
+          </div>,
+        );
+      continue;
+    }
+    if (TABLE_LINE.test(line)) {
+      const rows: string[][] = [];
+      while (i < lines.length && TABLE_LINE.test(lines[i])) {
+        const r = cells(lines[i++]);
+        if (r.every((c) => /^:?-{2,}:?$/.test(c))) continue; // header separator
+        rows.push(r);
+      }
+      if (rows.length === 0) continue;
+      const [head, ...body] = rows;
+      out.push(
+        <div key={key++} className="mt-3 overflow-x-auto">
+          <table className="w-full border-collapse text-[0.9em]">
+            <thead>
+              <tr>
+                {head.map((c, n) => (
+                  <th key={n} className="border-b-2 border-current/30 px-[0.6em] py-[0.35em] text-left font-bold">
+                    {inline(c)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((r, n) => (
+                <tr key={n} className="border-b border-current/15">
+                  {r.map((c, m) => (
+                    <td key={m} className="px-[0.6em] py-[0.35em] align-top">
+                      {inline(c)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
     if (/^>\s?/.test(line)) {
       const q: string[] = [];
       while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, ""));
@@ -71,7 +137,9 @@ function renderBlocks(src: string): React.ReactNode[] {
       !/^(#{1,3})\s+/.test(lines[i]) &&
       !/^\s*[-*]\s+/.test(lines[i]) &&
       !/^\s*\d+[.)]\s+/.test(lines[i]) &&
-      !/^>\s?/.test(lines[i])
+      !/^>\s?/.test(lines[i]) &&
+      !IMAGE_LINE.test(lines[i]) &&
+      !TABLE_LINE.test(lines[i])
     )
       para.push(lines[i++]);
     out.push(<p key={key++}>{inline(para.join(" "))}</p>);

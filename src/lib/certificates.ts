@@ -1,7 +1,8 @@
 import "server-only";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { attemptAnswers, attempts, courses, slides } from "@/db/schema";
+import { attemptAnswers, attempts, courses } from "@/db/schema";
+import { attemptSlides } from "@/lib/attempts";
 
 export type Certificate = {
   /** The first passing attempt: its id doubles as the certificate number. */
@@ -22,13 +23,14 @@ export function certificateNumber(attemptId: string) {
 /** Signed acknowledgement slides in an attempt: the evidence for policy sign-off. */
 export async function acknowledgementsFor(attemptId: string) {
   const db = await getDb();
-  const rows = await db
-    .select({ question: slides.question, at: attemptAnswers.answeredAt, answer: attemptAnswers.answer })
-    .from(attemptAnswers)
-    .innerJoin(slides, eq(slides.id, attemptAnswers.slideId))
-    .where(and(eq(attemptAnswers.attemptId, attemptId), sql`${slides.question}->>'type' = 'acknowledge'`))
-    .orderBy(asc(attemptAnswers.answeredAt));
-  return rows.flatMap((r) => (r.question?.type === "acknowledge" && r.answer === true ? [{ statement: r.question.statement, at: r.at }] : []));
+  const [attempt] = await db.select().from(attempts).where(eq(attempts.id, attemptId));
+  if (!attempt) return [];
+  const bySlide = new Map((await attemptSlides(attempt)).map((s) => [s.id, s.question]));
+  const rows = await db.select().from(attemptAnswers).where(eq(attemptAnswers.attemptId, attemptId)).orderBy(asc(attemptAnswers.answeredAt));
+  return rows.flatMap((r) => {
+    const q = bySlide.get(r.slideId);
+    return q?.type === "acknowledge" && r.answer === true ? [{ statement: q.statement, at: r.answeredAt }] : [];
+  });
 }
 
 /** One certificate per course the user has passed. */

@@ -5,6 +5,8 @@ import { courses, slides } from "@/db/schema";
 import { requirePermission } from "@/lib/session";
 import type { EditorSlide } from "@/lib/studio-schema";
 import { Editor } from "./editor";
+import { hasUnpublishedChanges, listVersions } from "@/lib/versions";
+import { courseFeedback } from "@/lib/ratings";
 
 export async function generateMetadata(props: PageProps<"/studio/[courseId]">) {
   const { courseId } = await props.params;
@@ -24,6 +26,10 @@ export default async function EditorPage(props: PageProps<"/studio/[courseId]">)
   if (!course) notFound();
   const rows = await db.select().from(slides).where(eq(slides.courseId, courseId)).orderBy(asc(slides.position));
 
+  const changes = course.status === "published" && (await hasUnpublishedChanges(course.id));
+  const feedback = (await courseFeedback(course.id, 30)).map((f) => ({ ...f, at: f.at.toISOString() }));
+  const versions = (await listVersions(course.id)).map((v) => ({ ...v, publishedAt: v.publishedAt.toISOString() }));
+
   const editorSlides: EditorSlide[] = rows.map((s) => ({
     id: s.id,
     kind: s.kind,
@@ -33,6 +39,7 @@ export default async function EditorPage(props: PageProps<"/studio/[courseId]">)
     mediaUrl: s.mediaUrl,
     notes: s.notes,
     question: s.question,
+    requireMedia: s.requireMedia,
   }));
 
   return (
@@ -51,9 +58,13 @@ export default async function EditorPage(props: PageProps<"/studio/[courseId]">)
         passMark: course.passMark,
         maxAttempts: course.maxAttempts,
         completionXp: course.completionXp,
+        drawQuestions: course.drawQuestions,
       }}
+      initialChanges={changes}
+      versions={versions}
+      feedback={feedback}
       initialSlides={editorSlides}
-      importedCount={typeof sp.imported === "string" ? Number(sp.imported) || null : null}
+      importedCount={sp.imported === "pdf" ? -1 : typeof sp.imported === "string" ? Number(sp.imported) || null : null}
     />
   );
 }

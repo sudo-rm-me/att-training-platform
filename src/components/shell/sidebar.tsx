@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   Award,
   BookOpen,
+  Boxes,
   ClipboardList,
   GraduationCap,
   History,
@@ -36,6 +37,7 @@ const ICONS: Record<NavIcon, React.ComponentType<{ className?: string }>> = {
   studio: PenTool,
   users: Users,
   audit: History,
+  teams: Boxes,
 };
 
 function isActive(pathname: string, href: string) {

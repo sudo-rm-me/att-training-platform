@@ -1,9 +1,10 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
-import { Building2, ClipboardList, Globe2, User as UserIcon } from "lucide-react";
+import { Building2, ClipboardList, Globe2, User as UserIcon, Users } from "lucide-react";
 import { getDb } from "@/db";
 import { assignments, courses, users } from "@/db/schema";
 import { requirePermission } from "@/lib/session";
-import { appliesTo, canManageUser, dueState, dueText, listDepartments, managedPeople, passedPairs } from "@/lib/assignments";
+import { appliesTo, canTarget, dueState, dueText, listDepartments, managedPeople, passedPairs } from "@/lib/assignments";
+import { listTeams, scopeFor, teamsByIds } from "@/lib/teams";
 import { dayKey } from "@/lib/gamification";
 import { Card, EmptyState, PageHeader, Progress } from "@/components/ui";
 import { DueChip } from "@/components/due-chip";
@@ -16,17 +17,23 @@ export const metadata = { title: "Assignments" };
 export default async function AssignmentsPage() {
   const me = await requirePermission("manage");
   const isAdmin = me.role === "admin";
+  const scope = await scopeFor(me);
   const db = await getDb();
 
-  const [published, people, departments] = await Promise.all([
+  const [published, people, departments, myTeams, allTeams] = await Promise.all([
     db
       .select({ id: courses.id, title: courses.title, icon: courses.icon })
       .from(courses)
       .where(eq(courses.status, "published"))
       .orderBy(asc(courses.title)),
-    managedPeople(me),
-    isAdmin ? listDepartments() : Promise.resolve(me.department?.trim() ? [me.department.trim()] : []),
+    managedPeople(scope),
+    isAdmin
+      ? listDepartments()
+      : Promise.resolve(scope.leadTeamIds.length === 0 && me.department?.trim() ? [me.department.trim()] : []),
+    isAdmin ? listTeams() : teamsByIds(scope.leadTeamIds),
+    listTeams(),
   ]);
+  const teamName = new Map(allTeams.map((t) => [t.id, `${t.icon} ${t.name}`]));
 
   const rows = await db
     .select({ a: assignments, courseTitle: courses.title, courseIcon: courses.icon, courseStatus: courses.status })
@@ -66,7 +73,9 @@ export default async function AssignmentsPage() {
         subtitle={
           isAdmin
             ? "Assign required training to people, departments or the whole organisation, with optional due dates."
-            : `Assign required training to people in ${me.department ?? "your department"}.`
+            : scope.leadTeamIds.length
+              ? "Assign required training to the teams you lead."
+              : `Assign required training to people in ${me.department ?? "your department"}.`
         }
       />
 
@@ -74,7 +83,7 @@ export default async function AssignmentsPage() {
         <EmptyState
           icon={<Building2 className="h-6 w-6" />}
           title="No team found"
-          body="Your profile doesn't have a department yet, so there's nobody to assign training to. Ask an admin, or check your department in Microsoft Entra."
+          body="You don't lead a team yet and your profile has no department, so there's nobody to assign training to. Ask an admin to make you a team lead."
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
@@ -87,6 +96,7 @@ export default async function AssignmentsPage() {
                 courses={published}
                 people={people.map((p) => ({ id: p.id, name: p.name, department: p.department }))}
                 departments={departments}
+                teams={myTeams.map((t) => ({ id: t.id, name: t.name, icon: t.icon }))}
                 allowEveryone={isAdmin}
                 today={dayKey(now)}
               />
@@ -107,8 +117,7 @@ export default async function AssignmentsPage() {
                 const allDone = targets.length > 0 && done === targets.length;
                 const state = dueState(a.dueAt, allDone, now);
                 const targetUser = a.targetUserId ? names.get(a.targetUserId) : null;
-                const editable =
-                  isAdmin || (a.targetType !== "everyone" && (a.targetType === "department" || (targetUser && canManageUser(me, targetUser))));
+                const editable = canTarget(scope, a, targetUser ? people.find((p) => p.id === a.targetUserId) ?? null : null);
                 return (
                   <Card key={a.id} className="flex flex-wrap items-center gap-4 p-4">
                     <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-brand/10 text-2xl">{courseIcon}</span>
@@ -122,6 +131,10 @@ export default async function AssignmentsPage() {
                           {a.targetType === "everyone" ? (
                             <>
                               <Globe2 className="h-3.5 w-3.5" /> Everyone
+                            </>
+                          ) : a.targetType === "team" ? (
+                            <>
+                              <Users className="h-3.5 w-3.5" /> {teamName.get(a.targetTeamId!) ?? "Deleted team"}
                             </>
                           ) : a.targetType === "department" ? (
                             <>

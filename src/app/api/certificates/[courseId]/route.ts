@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
 import { canManageUser } from "@/lib/assignments";
+import { scopeFor } from "@/lib/teams";
 import { certificateNumber, certificatesFor } from "@/lib/certificates";
 import { renderCertificate } from "@/lib/certificate-pdf";
 import { TZ } from "@/lib/gamification";
@@ -23,7 +24,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/certificates/[co
   if (forUser && forUser !== me.id) {
     const db = await getDb();
     const [u] = await db.select().from(users).where(eq(users.id, forUser)).limit(1);
-    if (!u || !canManageUser(me, u)) return new Response("Not found", { status: 404 });
+    if (!u || !canManageUser(await scopeFor(me), u)) return new Response("Not found", { status: 404 });
     learner = u;
   }
 

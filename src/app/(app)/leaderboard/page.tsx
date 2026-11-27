@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, count, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { Crown, Flame, Users } from "lucide-react";
 import { getDb } from "@/db";
-import { users, xpEvents, type AvatarConfig } from "@/db/schema";
+import { teams as teamsTable, users, xpEvents, type AvatarConfig } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { levelFromXp } from "@/lib/levels";
 import { liveStreak } from "@/lib/gamification";
@@ -26,6 +26,7 @@ type Row = {
   id: string;
   name: string;
   department: string | null;
+  teamId: string | null;
   avatar: AvatarConfig | null;
   xp: number;
   totalXp: number;
@@ -45,7 +46,11 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
     `/leaderboard?${new URLSearchParams({ period: period.key, view, ...patch })}`;
 
   let people: Row[] = [];
-  let teams: { department: string; members: number; xp: number; avg: number; rank: number }[] = [];
+  let teams: { key: string; label: string; members: number; xp: number; avg: number; rank: number }[] = [];
+  const allTeams = await db.select().from(teamsTable);
+  const useTeams = allTeams.length > 0;
+  const teamLabel = new Map(allTeams.map((t) => [t.id, `${t.icon} ${t.name}`]));
+  const myGroup = useTeams ? me.teamId : me.department;
 
   if (view === "people") {
     const raw = since
@@ -54,6 +59,7 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
             id: users.id,
             name: users.name,
             department: users.department,
+            teamId: users.teamId,
             avatar: users.avatar,
             totalXp: users.xp,
             currentStreak: users.currentStreak,
@@ -71,6 +77,7 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
             id: users.id,
             name: users.name,
             department: users.department,
+            teamId: users.teamId,
             avatar: users.avatar,
             totalXp: users.xp,
             currentStreak: users.currentStreak,
@@ -88,24 +95,27 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
       return { ...r, streak: liveStreak(r), rank };
     });
   } else {
+    // Rank admin-managed teams when there are any; otherwise Entra departments.
+    const groupCol = useTeams ? users.teamId : users.department;
     const members = await db
-      .select({ department: users.department, n: count() })
+      .select({ key: groupCol, n: count() })
       .from(users)
-      .where(isNotNull(users.department))
-      .groupBy(users.department);
+      .where(isNotNull(groupCol))
+      .groupBy(groupCol);
     const totals = await db
-      .select({ department: users.department, xp: sql<number>`coalesce(sum(${xpEvents.xp}), 0)`.mapWith(Number) })
+      .select({ key: groupCol, xp: sql<number>`coalesce(sum(${xpEvents.xp}), 0)`.mapWith(Number) })
       .from(xpEvents)
       .innerJoin(users, eq(users.id, xpEvents.userId))
-      .where(since ? and(isNotNull(users.department), gte(xpEvents.createdAt, since)) : isNotNull(users.department))
-      .groupBy(users.department);
-    const t = new Map(totals.map((r) => [r.department, r.xp]));
+      .where(since ? and(isNotNull(groupCol), gte(xpEvents.createdAt, since)) : isNotNull(groupCol))
+      .groupBy(groupCol);
+    const t = new Map(totals.map((r) => [r.key, r.xp]));
     teams = members
       .map((m) => {
-        const xp = t.get(m.department) ?? 0;
-        return { department: m.department!, members: m.n, xp, avg: Math.round(xp / Math.max(1, m.n)), rank: 0 };
+        const xp = t.get(m.key) ?? 0;
+        const label = useTeams ? (teamLabel.get(m.key!) ?? "") : m.key!;
+        return { key: m.key!, label, members: m.n, xp, avg: Math.round(xp / Math.max(1, m.n)), rank: 0 };
       })
-      .filter((x) => x.department.trim())
+      .filter((x) => x.label.trim())
       .sort((a, b) => b.avg - a.avg || b.xp - a.xp);
     teams.forEach((x, i) => (x.rank = i + 1));
   }
@@ -172,7 +182,7 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
                       />
                     </div>
                     <div className="mt-2 max-w-full truncate text-center font-bold">{p.name}</div>
-                    <div className="text-xs text-muted">{p.department ?? ""}</div>
+                    <div className="text-xs text-muted">{(p.teamId && teamLabel.get(p.teamId)) || p.department || ""}</div>
                     <div
                       className={cn(
                         "mt-3 flex w-full flex-col items-center justify-start rounded-t-3xl pt-3 text-white shadow-xl",
@@ -204,7 +214,7 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
                       </div>
                       <div className="text-xs text-muted">
                         Level {levelFromXp(p.totalXp).level} · {levelFromXp(p.totalXp).title}
-                        {p.department && ` · ${p.department}`}
+                        {((p.teamId && teamLabel.get(p.teamId)) || p.department) && ` · ${(p.teamId && teamLabel.get(p.teamId)) || p.department}`}
                       </div>
                     </div>
                     {p.streak > 1 && (
@@ -229,22 +239,22 @@ export default async function LeaderboardPage(props: PageProps<"/leaderboard">) 
           </>
         )
       ) : teams.length === 0 ? (
-        <EmptyState icon={<Users className="h-6 w-6" />} title="No teams yet" body="Team rankings use the department from people's Microsoft profiles." />
+        <EmptyState icon={<Users className="h-6 w-6" />} title="No teams yet" body="Admins can set up teams under Admin → Teams. Until then, rankings use departments from Microsoft profiles." />
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-muted">Teams are ranked by average XP per member, so smaller teams can compete with bigger ones.</p>
           {teams.map((t) => {
             const best = teams[0].avg || 1;
-            const mine = t.department === me.department;
+            const mine = t.key === myGroup;
             return (
-              <Card key={t.department} className={cn("flex items-center gap-4 p-4", mine && "ring-2 ring-brand")}>
+              <Card key={t.key} className={cn("flex items-center gap-4 p-4", mine && "ring-2 ring-brand")}>
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-gradient font-display text-lg font-bold text-white">
                   {t.rank <= 3 ? ["🥇", "🥈", "🥉"][t.rank - 1] : t.rank}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="truncate font-semibold">
-                      {t.department} {mine && <span className="text-xs font-bold text-brand">(your team)</span>}
+                      {t.label} {mine && <span className="text-xs font-bold text-brand">(your team)</span>}
                     </span>
                     <span className="font-display font-bold tabular-nums">{t.avg.toLocaleString()} XP / person</span>
                   </div>

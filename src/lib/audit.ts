@@ -25,6 +25,11 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "assignment.update": "Assignment updated",
   "assignment.delete": "Assignment removed",
   "assignment.nudge": "Reminder sent",
+  "team.create": "Team created",
+  "team.update": "Team updated",
+  "team.delete": "Team deleted",
+  "team.members": "Team members changed",
+  "team.lead": "Team lead changed",
 };
 
 /** Record an admin-relevant change. Never throws: auditing must not break the action. */

@@ -6,8 +6,9 @@ A training and training-tracking platform: slide-based courses with quizzes, XP,
 
 - **Courses**: slide decks with rich questions (single/multiple choice, true/false, ordering, matching), built in the in-app studio or imported from `.pptx`, with a score summary at the end.
 - **Gamification**: XP and levels, coins, 15 badges, daily streaks, individual and team leaderboards, a layered SVG character creator and an item shop.
-- **Assignments**: managers assign courses to people or their department; admins can also assign to any department or everyone. Due dates drive in-app reminders (a topbar bell, a dashboard banner and due chips).
-- **Team progress**: managers see completion, overdue training and XP for their department, and can download team members' certificates.
+- **Teams**: admins create teams (or generate one per Entra department), add people and choose team leads. New starters join the team named after their department.
+- **Assignments**: team leads assign courses to their team or its members; admins can assign to any team, department or everyone. Due dates drive in-app reminders (a topbar bell, a dashboard banner and due chips).
+- **Team progress**: team leads see completion, overdue training and XP for their teams, and can download members' certificates.
 - **Certificates**: every passed course earns a PDF certificate (`/certificates`).
 
 ## Quick start (local)
@@ -20,6 +21,8 @@ cp .env.example .env.local   # then set AUTH_SECRET; AUTH_DEV_LOGIN=true enables
 npm run dev
 ```
 
+Tests: `npm test` (unit + integration on in-memory Postgres) and `npm run test:e2e` (Playwright; uses your installed Edge locally).
+
 Open http://localhost:3000. With `AUTH_DEV_LOGIN=true` you can sign in with any name and email. Put your email in `INITIAL_ADMIN_EMAILS` to become an admin.
 
 Database migrations in `./drizzle` run automatically on startup. After changing `src/db/schema.ts`, run `npm run db:generate`.
@@ -31,11 +34,11 @@ Roles are managed in the app (**Admin → People & roles**):
 | Role    | Can                                                   |
 | ------- | ----------------------------------------------------- |
 | Learner | Take courses, earn XP and coins, customise an avatar  |
-| Manager | See their department's progress and assign training   |
+| Manager | Lead teams: see their progress and assign training     |
 | Author  | Create, import and publish courses                    |
 | Admin   | Everything, including managing roles                  |
 
-Anyone listed in `INITIAL_ADMIN_EMAILS` is made an admin when they sign in. A manager's team is everyone with the same **department** (synced from Microsoft Entra / Graph on sign-in).
+Anyone listed in `INITIAL_ADMIN_EMAILS` is made an admin when they sign in. Managers manage the **teams they lead** (Admin → Teams). A manager who leads no team falls back to everyone in their Entra **department**.
 
 ## Running the container locally
 

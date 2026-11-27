@@ -1,7 +1,7 @@
 import "server-only";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { users, type User } from "@/db/schema";
+import { teams, users, type User } from "@/db/schema";
 
 const initialAdmins = () =>
   (process.env.INITIAL_ADMIN_EMAILS ?? "")
@@ -48,6 +48,15 @@ export async function upsertUserFromSignIn(p: SignInProfile): Promise<User> {
     return updated;
   }
 
+  // New starters join the team named after their department, if there is one.
+  const [team] = p.department?.trim()
+    ? await db
+        .select({ id: teams.id })
+        .from(teams)
+        .where(sql`lower(${teams.name}) = lower(${p.department.trim()})`)
+        .limit(1)
+    : [];
+
   const [created] = await db
     .insert(users)
     .values({
@@ -57,6 +66,7 @@ export async function upsertUserFromSignIn(p: SignInProfile): Promise<User> {
       department: p.department,
       jobTitle: p.jobTitle,
       role: isBootstrapAdmin ? "admin" : "learner",
+      teamId: team?.id ?? null,
     })
     .returning();
   return created;

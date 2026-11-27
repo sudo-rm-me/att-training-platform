@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { assignments, attempts, courses, users, type Assignment, type User } from "@/db/schema";
 import { listCatalog, type CatalogCourse } from "@/lib/courses";
+import type { Scope } from "@/lib/teams";
 
 export const DUE_SOON_DAYS = 7;
 const DAY = 86_400_000;
@@ -35,20 +36,61 @@ function startOfDay(d: Date) {
   return x.getTime();
 }
 
-const sameDept = (a: string | null | undefined, b: string | null | undefined) =>
+export const sameDept = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** Does this assignment apply to this person? */
-export function appliesTo(a: Pick<Assignment, "targetType" | "targetUserId" | "targetDepartment">, u: Pick<User, "id" | "department">) {
-  if (a.targetType === "everyone") return true;
-  if (a.targetType === "user") return a.targetUserId === u.id;
-  return sameDept(a.targetDepartment, u.department);
+export type Member = Pick<User, "id" | "department" | "teamId">;
+
+export function appliesTo(
+  a: Pick<Assignment, "targetType" | "targetUserId" | "targetDepartment" | "targetTeamId">,
+  u: Member,
+) {
+  switch (a.targetType) {
+    case "everyone":
+      return true;
+    case "user":
+      return a.targetUserId === u.id;
+    case "team":
+      return !!u.teamId && a.targetTeamId === u.teamId;
+    case "department":
+      return sameDept(a.targetDepartment, u.department);
+  }
 }
 
-/** Can `me` manage (assign to / view progress of) `target`? */
-export function canManageUser(me: Pick<User, "role" | "department">, target: Pick<User, "department">) {
+/**
+ * Can `me` manage (assign to / view progress of) `target`?
+ * Admins: everyone. Managers: members of the teams they lead, or, if they
+ * lead no teams, people in their own department.
+ */
+export function canManageUser(me: Pick<Scope, "role" | "department" | "leadTeamIds">, target: Pick<User, "department" | "teamId">) {
   if (me.role === "admin") return true;
-  return me.role === "manager" && sameDept(me.department, target.department);
+  if (me.role !== "manager") return false;
+  if (me.leadTeamIds.length) return !!target.teamId && me.leadTeamIds.includes(target.teamId);
+  return sameDept(me.department, target.department);
+}
+
+/**
+ * May `me` create or remove an assignment with this target?
+ * `targetUser` is the assigned person (only needed for "user" targets).
+ */
+export function canTarget(
+  me: Pick<Scope, "role" | "department" | "leadTeamIds">,
+  a: Pick<Assignment, "targetType" | "targetDepartment" | "targetTeamId">,
+  targetUser?: Pick<User, "department" | "teamId"> | null,
+) {
+  if (me.role === "admin") return true;
+  if (me.role !== "manager") return false;
+  switch (a.targetType) {
+    case "everyone":
+      return false;
+    case "team":
+      return !!a.targetTeamId && me.leadTeamIds.includes(a.targetTeamId);
+    case "department":
+      return me.leadTeamIds.length === 0 && sameDept(a.targetDepartment, me.department);
+    case "user":
+      return !!targetUser && canManageUser(me, targetUser);
+  }
 }
 
 /** All assignments for published courses, oldest first. */
@@ -64,7 +106,7 @@ export async function publishedAssignments() {
 }
 
 /** Effective (merged) assignment per course for a user: the earliest due date wins. */
-export function mergeForUser(all: Assignment[], u: Pick<User, "id" | "department">) {
+export function mergeForUser(all: Assignment[], u: Member) {
   const out = new Map<string, { dueAt: Date | null; note: string | null }>();
   for (const a of all) {
     if (!appliesTo(a, u)) continue;
@@ -98,9 +140,10 @@ export type MyAssignment = {
 const ORDER: Record<DueState, number> = { overdue: 0, due_soon: 1, open: 2, done: 3 };
 
 /** The signed-in user's assigned courses, most urgent first. */
-export const getMyAssignments = cache(async (userId: string, department: string | null): Promise<MyAssignment[]> => {
+export const getMyAssignments = cache(
+  async (userId: string, department: string | null, teamId: string | null): Promise<MyAssignment[]> => {
   const [all, catalog] = await Promise.all([publishedAssignments(), listCatalog(userId)]);
-  const mine = mergeForUser(all, { id: userId, department });
+  const mine = mergeForUser(all, { id: userId, department, teamId });
   const now = new Date();
   return catalog
     .filter((c) => mine.has(c.id))
@@ -113,7 +156,8 @@ export const getMyAssignments = cache(async (userId: string, department: string 
         ORDER[a.state] - ORDER[b.state] ||
         (a.dueAt?.getTime() ?? Infinity) - (b.dueAt?.getTime() ?? Infinity),
     );
-});
+  },
+);
 
 /** Distinct non-empty departments, alphabetical. */
 export async function listDepartments() {
@@ -126,15 +170,23 @@ export async function listDepartments() {
   return rows.map((r) => r.d!);
 }
 
-/** People `me` can manage: admins see everyone (optionally filtered), managers see their department. */
-export async function managedPeople(me: Pick<User, "role" | "department">, department?: string | null) {
+/**
+ * People `me` can manage, optionally narrowed to one team or department.
+ * Managers only ever get people inside their scope, whatever the filter says.
+ */
+export async function managedPeople(me: Scope, filter: { teamId?: string | null; department?: string | null } = {}) {
   const db = await getDb();
-  const dept = me.role === "admin" ? department : me.department;
-  if (me.role !== "admin" && !dept) return [];
-  return db
-    .select()
-    .from(users)
-    .where(dept ? sql`lower(trim(${users.department})) = lower(trim(${dept}))` : undefined)
-    .orderBy(asc(users.name))
-    .limit(2000);
+  const byDept = (d: string) => sql`lower(trim(${users.department})) = lower(trim(${d}))`;
+  let where;
+  if (me.role === "admin") {
+    where = filter.teamId ? eq(users.teamId, filter.teamId) : filter.department ? byDept(filter.department) : undefined;
+  } else if (me.role === "manager" && me.leadTeamIds.length) {
+    const ids = filter.teamId && me.leadTeamIds.includes(filter.teamId) ? [filter.teamId] : me.leadTeamIds;
+    where = inArray(users.teamId, ids);
+  } else if (me.role === "manager" && me.department?.trim()) {
+    where = byDept(me.department);
+  } else {
+    return [];
+  }
+  return db.select().from(users).where(where).orderBy(asc(users.name)).limit(5000);
 }

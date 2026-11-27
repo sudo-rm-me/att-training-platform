@@ -42,7 +42,7 @@ export default async function CoursePage(props: PageProps<"/courses/[courseId]">
       .orderBy(desc(attempts.completedAt))
       .limit(10),
   ]);
-  const assignment = (await getMyAssignments(user.id, user.department)).find((a) => a.course.id === course.id);
+  const assignment = (await getMyAssignments(user.id, user.department, user.teamId)).find((a) => a.course.id === course.id);
   const c = counts.get(course.id) ?? { slides: 0, questions: 0 };
   const p = progress.get(course.id)!;
   const theme = getTheme(course.theme);

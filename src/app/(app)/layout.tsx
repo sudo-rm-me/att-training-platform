@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     admin: can.admin(user.role),
   });
 
-  const reminders = (await getMyAssignments(user.id, user.department))
+  const reminders = (await getMyAssignments(user.id, user.department, user.teamId))
     .filter((a) => a.state === "overdue" || a.state === "due_soon")
     .map((a) => ({
       courseId: a.course.id,

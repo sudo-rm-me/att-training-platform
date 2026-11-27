@@ -1,0 +1,38 @@
+# Run the production image locally against a real Postgres:
+#   docker compose up --build
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: att
+      POSTGRES_PASSWORD: att
+      POSTGRES_DB: att
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U att"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgres://att:att@db:5432/att
+      AUTH_URL: http://localhost:3000
+      UPLOAD_DIR: /app/.data/uploads
+    volumes:
+      - uploads:/app/.data/uploads
+
+volumes:
+  pgdata:
+  uploads:
